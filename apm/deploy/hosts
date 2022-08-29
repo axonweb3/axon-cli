@@ -2,8 +2,8 @@
 #node_type:axon_all_node   
 
 [axon_node]
-172.18.124.188
-
+ 172.17.186.69
+ 
 [prometheus_server]
 xxx.xxx.xxx.xxx
 

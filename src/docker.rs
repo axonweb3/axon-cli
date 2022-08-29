@@ -258,7 +258,11 @@ impl DockerApi {
     }
 
     async fn start_grafana(dir: &str) {
-        let name = "axon-grafana";
+        let docker = DockerApi::new_docker();
+        let image_name = "grafana/grafana";
+        let image_tag = "master";
+        DockerApi::pull_image(&docker, image_name, image_tag).await;
+
         let vols = vec![
             dir.to_owned() + "/config/grafana/grafana.ini:/etc/grafana/grafana.ini",
             dir.to_owned() + "/config/grafana/dashboards:/var/lib/grafana/dashboards",
@@ -272,7 +276,8 @@ impl DockerApi {
             "GF_LOG_FILTERS=rendering:debug",
         ];
 
-        let opts = ContainerCreateOpts::builder("grafana/grafana:master")
+        let name = "axon-grafana";
+        let opts = ContainerCreateOpts::builder(image_name.to_owned() + ":" + image_tag)
             .name(name)
             .restart_policy("on-failure", 0)
             .expose(PublishPort::tcp(3000), 8600)
@@ -286,8 +291,12 @@ impl DockerApi {
     }
 
     async fn start_grafana_renderer() {
+        let docker = DockerApi::new_docker();
+        let image_name = "grafana/grafana-image-renderer";
+        let image_tag = "2.0.0";
+        DockerApi::pull_image(&docker, image_name, image_tag).await;
         let name = "axon-grafana-image-renderer";
-        let opts = ContainerCreateOpts::builder("grafana/grafana-image-renderer:2.0.0")
+        let opts = ContainerCreateOpts::builder(image_name.to_owned() + ":" + image_tag)
             .name(name)
             .expose(PublishPort::tcp(8081), 0)
             .network_mode("axon-monitor")
@@ -298,7 +307,10 @@ impl DockerApi {
     }
 
     async fn start_prometheus(dir: &str) {
-        let name = "prometheus";
+        let docker = DockerApi::new_docker();
+        let image_name = "prom/prometheus";
+        let image_tag = "v2.32.1";
+        DockerApi::pull_image(&docker, image_name, image_tag).await;
         let vols = vec![
             dir.to_owned() + "/config/promethues/prometheus.yml:/etc/prometheus/prometheus.yml",
             dir.to_owned() + "/data/prometheus:/prometheus",
@@ -311,7 +323,8 @@ impl DockerApi {
             "--web.enable-lifecycle",
         ];
 
-        let opts = ContainerCreateOpts::builder("prom/prometheus:v2.32.1")
+        let name = "prometheus";
+        let opts = ContainerCreateOpts::builder(image_name.to_owned() + ":" + image_tag)
             .name(name)
             .restart_policy("on-failure", 0)
             .volumes(vols)
@@ -325,7 +338,11 @@ impl DockerApi {
     }
 
     async fn start_elasticsearch(dir: &str) {
-        let name = "elasticsearch";
+        let docker = DockerApi::new_docker();
+        let image_name = "docker.elastic.co/elasticsearch/elasticsearch";
+        let image_tag = "7.6.2";
+        DockerApi::pull_image(&docker, image_name, image_tag).await;
+
         let vols = vec![dir.to_owned() + "/data/es:/usr/share/elasticsearch/data"];
         let env = vec![
             "cluster.name=jaeger-cluster",
@@ -336,23 +353,27 @@ impl DockerApi {
             "xpack.security.enabled=false",
         ];
 
-        let opts =
-            ContainerCreateOpts::builder("docker.elastic.co/elasticsearch/elasticsearch:7.6.2")
-                .name(name)
-                .expose(PublishPort::tcp(9200), 9200)
-                .expose(PublishPort::tcp(9300), 9300)
-                .restart_policy("on-failure", 0)
-                .env(env)
-                .volumes(vols)
-                .network_mode("axon-monitor")
-                .build();
+        let name = "elasticsearch";
+        let opts = ContainerCreateOpts::builder(image_name.to_owned() + ":" + image_tag)
+            .name(name)
+            .expose(PublishPort::tcp(9200), 9200)
+            .expose(PublishPort::tcp(9300), 9300)
+            .restart_policy("on-failure", 0)
+            .env(env)
+            .volumes(vols)
+            .network_mode("axon-monitor")
+            .build();
         // println!("opts {:?}", opts);
         println!("Start: {}", name);
         DockerApi::start_container(opts).await;
     }
 
     async fn start_jaeger_collector() {
-        let name = "jaeger-collector";
+        let docker = DockerApi::new_docker();
+        let image_name = "jaegertracing/jaeger-collector";
+        let image_tag = "1.32";
+        DockerApi::pull_image(&docker, image_name, image_tag).await;
+
         let env = vec!["SPAN_STORAGE_TYPE=elasticsearch"];
         let cmd = vec![
             "--es.server-urls=http://elasticsearch:9200",
@@ -361,7 +382,8 @@ impl DockerApi {
             "--log-level=error",
         ];
 
-        let opts = ContainerCreateOpts::builder("jaegertracing/jaeger-collector:1.32")
+        let name = "jaeger-collector";
+        let opts = ContainerCreateOpts::builder(image_name.to_owned() + ":" + image_tag)
             .name(name)
             .expose(PublishPort::tcp(14269), 14269)
             .expose(PublishPort::tcp(14268), 14268)
@@ -378,7 +400,11 @@ impl DockerApi {
     }
 
     async fn start_jaeger_query() {
-        let name = "jaeger-query";
+        let docker = DockerApi::new_docker();
+        let image_name = "jaegertracing/jaeger-query";
+        let image_tag = "1.32";
+        DockerApi::pull_image(&docker, image_name, image_tag).await;
+
         let env = vec!["SPAN_STORAGE_TYPE=elasticsearch", "no_proxy=localhost"];
         let cmd = vec![
             "--es.server-urls=http://elasticsearch:9200",
@@ -387,7 +413,8 @@ impl DockerApi {
             "--query.max-clock-skew-adjustment=0",
         ];
 
-        let opts = ContainerCreateOpts::builder("jaegertracing/jaeger-query:1.32")
+        let name = "jaeger-query";
+        let opts = ContainerCreateOpts::builder(image_name.to_owned() + ":" + image_tag)
             .name(name)
             .env(env)
             .expose(PublishPort::tcp(16686), 8202)
@@ -402,7 +429,11 @@ impl DockerApi {
     }
 
     async fn start_elastalert(dir: &str) {
-        let name = "elk-elastalert";
+        let docker = DockerApi::new_docker();
+        let image_name = "praecoapp/elastalert-server";
+        let image_tag = "20210704";
+        DockerApi::pull_image(&docker, image_name, image_tag).await;
+
         let vols = vec![
             dir.to_owned() + "/config/elastalert2/elastalert.yaml:/opt/elastalert/config.yaml",
             dir.to_owned()
@@ -411,7 +442,8 @@ impl DockerApi {
             dir.to_owned() + "/config/elastalert2/rule_templates:/opt/elastalert/rule_templates",
         ];
 
-        let opts = ContainerCreateOpts::builder("praecoapp/elastalert-server:20210704")
+        let name = "elk-elastalert";
+        let opts = ContainerCreateOpts::builder(image_name.to_owned() + ":" + image_tag)
             .name(name)
             .expose(PublishPort::tcp(3330), 3330)
             .expose(PublishPort::tcp(3333), 3333)
@@ -425,7 +457,11 @@ impl DockerApi {
     }
 
     async fn start_node_exporter() {
-        let name = "axon-node-exporter";
+        let docker = DockerApi::new_docker();
+        let image_name = "quay.io/prometheus/node-exporter";
+        let image_tag = "v0.18.1";
+        DockerApi::pull_image(&docker, image_name, image_tag).await;
+
         let cmd = vec![
             "--path.rootfs=/host",
             "--collector.tcpstat",
@@ -433,7 +469,8 @@ impl DockerApi {
         ];
         let vols = vec!["/:/host:ro,rslave"];
 
-        let opts = ContainerCreateOpts::builder("quay.io/prometheus/node-exporter:v0.18.1")
+        let name = "axon-node-exporter";
+        let opts = ContainerCreateOpts::builder(image_name.to_owned() + ":" + image_tag)
             .name(name)
             .cmd(cmd)
             .restart_policy("on-failure", 0)
@@ -446,11 +483,16 @@ impl DockerApi {
     }
 
     async fn start_jaeger_agent(addr: &str) {
-        let name = "jaeger-agent";
+        let docker = DockerApi::new_docker();
+        let image_name = "jaegertracing/jaeger-agent";
+        let image_tag = "1.32";
+        DockerApi::pull_image(&docker, image_name, image_tag).await;
+
         // let cmd = vec!["--reporter.grpc.host-port=${JACGER_COLLECTOR_ADDRESS}"];
         let cmd = vec!["--reporter.grpc.host-port=".to_owned() + addr];
 
-        let opts = ContainerCreateOpts::builder("jaegertracing/jaeger-agent:1.32")
+        let name = "jaeger-agent";
+        let opts = ContainerCreateOpts::builder(image_name.to_owned() + ":" + image_tag)
             .name(name)
             .restart_policy("on-failure", 0)
             .expose(PublishPort::tcp(14271), 14271)
@@ -466,7 +508,11 @@ impl DockerApi {
     }
 
     async fn start_promtail(dir: &str, log_path: &str) {
-        let name = "axon-promtail";
+        let docker = DockerApi::new_docker();
+        let image_name = "grafana/promtail";
+        let image_tag = "master-9ad98df";
+        DockerApi::pull_image(&docker, image_name, image_tag).await;
+
         let vols = vec![
             dir.to_owned() + "/data/promtail/positions:/tmp/promtail/",
             dir.to_owned()
@@ -476,7 +522,8 @@ impl DockerApi {
         ];
         let cmd = vec!["-config.file=/etc/promtail/promtail-config.yaml"];
 
-        let opts = ContainerCreateOpts::builder("grafana/promtail:master-9ad98df")
+        let name = "axon-promtail";
+        let opts = ContainerCreateOpts::builder(image_name.to_owned() + ":" + image_tag)
             .name(name)
             .restart_policy("on-failure", 0)
             .expose(PublishPort::tcp(9080), 8102)
@@ -489,7 +536,11 @@ impl DockerApi {
     }
 
     async fn start_filebeat(dir: &str, log_path: &str) {
-        let name = "axon-filebeat";
+        let docker = DockerApi::new_docker();
+        let image_name = "docker.elastic.co/beats/filebeat";
+        let image_tag = "7.2.0";
+        DockerApi::pull_image(&docker, image_name, image_tag).await;
+
         let vols = vec![
             "/var/run/docker.sock:/host_docker/docker.sock".to_string(),
             "/var/lib/docker:/host_docker/var/lib/docker".to_string(),
@@ -499,7 +550,8 @@ impl DockerApi {
         ];
         let cmd = vec!["--strict.perms=false"];
 
-        let opts = ContainerCreateOpts::builder("docker.elastic.co/beats/filebeat:7.2.0")
+        let name = "axon-filebeat";
+        let opts = ContainerCreateOpts::builder(image_name.to_owned() + ":" + image_tag)
             .name(name)
             .user("root")
             .volumes(vols)
