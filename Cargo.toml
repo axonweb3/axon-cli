@@ -26,4 +26,6 @@ rustyline = { version = "9.1", features = ["case_insensitive_history_search"] }
 secp256k1 = { version = "0.20", features = ["recovery"] }
 serde_json = "1.0"
 tokio = { version = "1.0", features = ["macros"] }
+wsl = "0.1.0"
+wslpath = "0.0.2"
 

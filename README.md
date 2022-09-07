@@ -4,8 +4,9 @@ You need to take the following steps to run axon and benchmark with axon-cli.
 Under the axon-cli directory, run the following command:  
     `cargo build --release` Or  `cargo build`
 ## 2. Run axon-cli
- For example,
-`./target/debug/axon-cli` in case you run the command `cargo build`.
+For example run: `./target/debug/axon-cli` in case you've previously ran the command `cargo build`.
+
+You can optionally pass `DOCKER_API_URL` environment variable to Axon CLI which lets you change default Docker API URL (127.0.0.1:2375). This is especially useful when you're running Docker Desktop on Windows Subsystem for Linux (WSL).
 
 ## 3. Interactive Commands
 Before the execution of axon commands, you have to enable tcp port for docker(0.0.0.0:2375 in this case).  
