@@ -9,7 +9,6 @@ on:
   push:
     branches:
       - 'pkg/*'
-      - 'auto-release-by-action'
 
 # on:
 #   push:
@@ -37,7 +36,7 @@ jobs:
         id: create-release
         uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
         with:
           tag_name: ${{ env.GIT_TAG_NAME}}
           release_name: ${{ env.GIT_TAG_NAME}}
@@ -47,6 +46,8 @@ jobs:
   package-for-linux:
     name: package-for-linux
     runs-on: ubuntu-latest
+    needs:
+      - create-release
     steps:
     - uses: actions/checkout@v2
     - name: Set Env
@@ -81,6 +82,8 @@ jobs:
   package-for-mac:
     name: package-for-mac
     runs-on: macos-11
+    needs:
+      - create-release
     steps:
     - uses: actions/checkout@v2
     - name: Set Env
@@ -90,7 +93,7 @@ jobs:
     - name: Build and package axon-cli
       run: |
         export GIT_TAG_NAME=` echo ${{ github.ref }} | awk -F '/' '{print $4}' `
-        docker run --rm -i -w /axon-cli -v $(pwd):/axon-cli -e OPENSSL_STATIC=1 $BUILDER_IMAGE cargo build --release
+        OPENSSL_STATIC=1 $BUILDER_IMAGE cargo build --release
         rm -rf releases
         mkdir releases
         PKG_NAME="axon-cli_${{env.GIT_TAG_NAME}}_x86_64-apple-darwin"
@@ -107,3 +110,35 @@ jobs:
         path: axon-cli_${{env.GIT_TAG_NAME }}_${{env.REL_PKG }}
     env:
       REL_PKG: x86_64-apple-darwin.zip
+
+  Upload_File:
+    name: Upload_Zip_File
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - REL_PKG: x86_64-unknown-linux-gnu.tar.gz
+          - REL_PKG: x86_64-apple-darwin.zip
+    needs:
+      - create-release
+      - package-for-linux
+      - package-for-mac
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set tag
+      run: |
+        export GIT_TAG_NAME=` echo ${{ github.ref }} | awk -F '/' '{print $4}' `
+        echo "GIT_TAG_NAME=$GIT_TAG_NAME" >> $GITHUB_ENV
+    - name: Prepare - Download tar
+      uses: actions/download-artifact@v2
+      with:
+        name: axon-cli_${{env.GIT_TAG_NAME}}_${{ matrix.REL_PKG }}
+    - name: Upload tar assets
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_name: axon-cli_${{env.GIT_TAG_NAME}}_${{ matrix.REL_PKG }}
+        asset_path: ${{ github.workspace }}/axon-cli_${{env.GIT_TAG_NAME }}_${{ matrix.REL_PKG }}
+        asset_content_type: application/octet-stream
