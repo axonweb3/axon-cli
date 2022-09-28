@@ -1,0 +1,109 @@
+name: Package
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+# push branch
+on:
+  push:
+    branches:
+      - 'pkg/*'
+      - 'auto-release-by-action'
+
+# on:
+#   push:
+#     tags:
+#       - v[0-9]+.[0-9]+.*
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: full
+
+
+jobs:
+  create-release:
+    name: Create release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create-release.outputs.upload_url }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set tag
+        run: |
+          export GIT_TAG_NAME=` echo ${{ github.ref }} | awk -F '/' '{print $4}' `
+          echo "GIT_TAG_NAME=$GIT_TAG_NAME" >> $GITHUB_ENV
+      - name: Create release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.GIT_TAG_NAME}}
+          release_name: ${{ env.GIT_TAG_NAME}}
+          draft: true
+          prerelease: true
+
+  package-for-linux:
+    name: package-for-linux
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set Env
+      run: |
+        export GIT_TAG_NAME=` echo ${{ github.ref }} | awk -F '/' '{print $4}' `
+        echo "GIT_TAG_NAME=$GIT_TAG_NAME" >> $GITHUB_ENV
+    - name: Build and package axon-cli
+      run: |
+        export GIT_TAG_NAME=` echo ${{ github.ref }} | awk -F '/' '{print $4}' `
+        docker run --rm -i -w /axon-cli -v $(pwd):/axon-cli -e OPENSSL_STATIC=1 $BUILDER_IMAGE cargo build --release
+        rm -rf releases
+        mkdir releases
+        PKG_NAME="axon-cli_${{env.GIT_TAG_NAME}}_x86_64-unknown-linux-gnu"
+        mkdir "releases/$PKG_NAME"
+
+        pushd releases
+        tar -czf $PKG_NAME.tar.gz $PKG_NAME
+        popd
+
+        mv ${{ github.workspace }}/releases/axon-cli_${{env.GIT_TAG_NAME }}_${{env.REL_PKG }} ${{ github.workspace }}
+    - name: upload-zip-file
+      uses: actions/upload-artifact@v2
+      with:
+        name: axon-cli_${{env.GIT_TAG_NAME }}_${{env.REL_PKG }}
+        path: axon-cli_${{env.GIT_TAG_NAME }}_${{env.REL_PKG }}
+    env:
+      BUILDER_IMAGE: nervos/ckb-docker-builder:bionic-rust-1.51.0
+      REL_PKG: x86_64-unknown-linux-gnu.tar.gz
+
+
+
+  package-for-mac:
+    name: package-for-mac
+    runs-on: macos-11
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set Env
+      run: |
+        export GIT_TAG_NAME=` echo ${{ github.ref }} | awk -F '/' '{print $4}' `
+        echo "GIT_TAG_NAME=$GIT_TAG_NAME" >> $GITHUB_ENV
+    - name: Build and package axon-cli
+      run: |
+        export GIT_TAG_NAME=` echo ${{ github.ref }} | awk -F '/' '{print $4}' `
+        docker run --rm -i -w /axon-cli -v $(pwd):/axon-cli -e OPENSSL_STATIC=1 $BUILDER_IMAGE cargo build --release
+        rm -rf releases
+        mkdir releases
+        PKG_NAME="axon-cli_${{env.GIT_TAG_NAME}}_x86_64-apple-darwin"
+        mkdir "releases/$PKG_NAME"
+
+        pushd releases
+        zip -r $PKG_NAME.zip $PKG_NAME
+        popd
+
+        mv ${{ github.workspace }}/releases/axon-cli_${{env.GIT_TAG_NAME }}_${{env.REL_PKG }} ${{ github.workspace }}
+    - uses: actions/upload-artifact@v2
+      with:
+        name: axon-cli_${{env.GIT_TAG_NAME }}_${{env.REL_PKG }}
+        path: axon-cli_${{env.GIT_TAG_NAME }}_${{env.REL_PKG }}
+    env:
+      REL_PKG: x86_64-apple-darwin.zip
