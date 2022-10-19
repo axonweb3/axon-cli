@@ -1,8 +1,9 @@
-use crate::crosschain_tx::crosschain;
 use ckb_types::{
     packed::Byte32,
     prelude::{Builder, Entity},
 };
+
+use crate::crosschain_tx::crosschain;
 
 impl From<&Byte32> for crosschain::Hash {
     fn from(hash: &Byte32) -> Self {

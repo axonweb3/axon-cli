@@ -1,141 +1,427 @@
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::{
+    fmt::Display,
+    fs::File,
+    io::{BufRead, BufReader},
+    path::Path,
+};
 
 use docker_api::{
-    api::NetworkCreateOpts, api::PublishPort, api::PullOpts, container::ContainerCreateOpts,
     docker::Docker,
+    errors,
+    errors::Result,
+    models::{ContainerInspect200Response, ImageBuildChunk, ImageInspect, Network},
+    opts::{ContainerCreateOpts, NetworkCreateOpts, PublishPort, PullOpts, RmContainerOpts},
+    Id,
 };
 use futures::StreamExt;
+use log::{debug, error, info};
+use serde::ser::Serialize;
 
-const DOCKER_URI: &str = "tcp://127.0.0.1:2375";
-const AXON_IMAGE_NAME: &str = "wenyuancas/axon";
-const AXON_IMAGE_TAG: &str = "v1";
-const BM_IMAGE_NAME: &str = "zhengjianhui/axon-benchmark";
+use crate::constants::*;
 
-#[derive(Default)]
+fn parse_inspect_result<T>(result: Result<T>) -> Result<Option<T>> {
+    match result {
+        Ok(result) => Ok(Some(result)),
+        Err(err) => {
+            if let errors::Error::Fault { code, .. } = err {
+                if code.as_str() == "404" {
+                    return Ok(None);
+                }
+            }
+
+            Err(err)
+        }
+    }
+}
+
+pub struct StartAxonArgs<
+    S0: AsRef<str>,
+    S1: AsRef<str>,
+    S2: AsRef<str>,
+    S3: AsRef<str>,
+    S4: AsRef<str>,
+    P: AsRef<Path>,
+> {
+    pub name:            S0,
+    pub config_path:     S1,
+    pub genesis_path:    S2,
+    pub network:         S3,
+    pub data_volume:     S4,
+    pub path:            P,
+    pub port:            u32,
+    pub collecting_port: u32,
+    pub p2p_port:        u32,
+}
+
 pub struct DockerApi {
-    path: String,
+    docker: Docker,
 }
 
 impl DockerApi {
-    pub fn new(path: String) -> Self {
-        DockerApi { path }
+    pub fn new_default() -> Result<Self> {
+        Self::new(get_default_docker_uri().to_string())
     }
 
-    pub fn new_docker() -> Docker {
-        Docker::new(DOCKER_URI).unwrap()
+    pub fn new(uri: String) -> Result<Self> {
+        Ok(Self {
+            docker: Docker::new(uri)?,
+        })
     }
 
-    pub async fn create_network(network_name: &str) {
-        let docker = DockerApi::new_docker();
+    pub async fn find_network(&self, name: impl Into<Id>) -> Result<Option<Network>> {
+        let inspect = self.docker.networks().get(name).inspect().await;
 
-        {
-            match docker.networks().get(network_name).inspect().await {
-                Ok(_) => {
-                    println!("network {} exist", network_name);
-                    return;
+        parse_inspect_result(inspect)
+    }
+
+    pub async fn ensure_network(&self, name: impl AsRef<str>) -> Result<()> {
+        debug!("Checking for network {}...", name.as_ref());
+        let network = self.find_network(name.as_ref()).await?;
+
+        if let Some(network) = network {
+            debug!(
+                "Network {} is existed, id: {}",
+                name.as_ref(),
+                network.id.unwrap_or_else(|| "".to_string()),
+            );
+            return Ok(());
+        }
+
+        info!("Network {} does't exist, creating...", name.as_ref());
+        let id = self
+            .docker
+            .networks()
+            .create(&NetworkCreateOpts::builder(name.as_ref()).build())
+            .await?
+            .id()
+            .to_string();
+        info!("Network {} has been created, id: {}", name.as_ref(), id);
+
+        Ok(())
+    }
+
+    pub async fn find_image(&self, name: impl Into<Id>) -> Result<Option<ImageInspect>> {
+        let inspect = self.docker.images().get(name).inspect().await;
+
+        parse_inspect_result(inspect)
+    }
+
+    async fn ensure_image<S0: Serialize + Display, S1: Serialize + Display>(
+        &self,
+        name: S0,
+        tag: S1,
+    ) -> Result<()> {
+        let image_name = format!("{}:{}", name, tag);
+        debug!("Checking for image {}...", image_name);
+        let image = self.find_image(&image_name).await?;
+
+        if let Some(image) = image {
+            debug!(
+                "Image {} is existed, id: {}",
+                image_name,
+                image.id.unwrap_or_else(|| "".to_string()),
+            );
+            return Ok(());
+        }
+
+        info!("Image {} does't exist, pulling...", image_name);
+        let opts = PullOpts::builder().image(name).tag(tag).build();
+        let images = self.docker.images();
+        let mut pulling = images.pull(&opts);
+
+        while let Some(chunk) = pulling.next().await {
+            match chunk? {
+                ImageBuildChunk::PullStatus {
+                    status,
+                    id,
+                    progress,
+                    ..
+                } => {
+                    if progress.is_none() {
+                        info!("{} {}", id.unwrap_or_else(|| "".to_string()), status);
+                    }
                 }
-                Err(err) => {
-                    println!("network {} not exist, {:?}", network_name, err);
+                ImageBuildChunk::Update { stream } => {
+                    info!("Pulling image {} {}...", image_name, stream);
+                }
+                ImageBuildChunk::Digest { aux } => {
+                    info!("Pulling image {} aux: {}...", image_name, aux.id);
+                }
+                ImageBuildChunk::Error { error, .. } => {
+                    error!("Pulling image {} {}...", image_name, error);
                 }
             };
-            // let driver = "bridge"; // default driver
-            match docker
-                .networks()
-                .create(&NetworkCreateOpts::builder(network_name).build())
-                .await
-            {
-                Ok(info) => println!("{:?}", info),
-                Err(e) => eprintln!("Error: {}", e),
-            }
-        };
-    }
-
-    async fn pull_image(docker: &Docker, name: &str, tag: &str) {
-        let images = docker.images();
-        let opts = PullOpts::builder().image(name).tag(tag).build();
-        let mut stream = images.pull(&opts);
-        while let Some(pull_result) = stream.next().await {
-            match pull_result {
-                Ok(_output) => {}
-                Err(e) => eprintln!("error {}", e),
-            }
         }
+
+        Ok(())
     }
 
-    pub async fn start_axon(&self, name: &str, file_para: &str, genesis_para: &str, port: u32) {
-        let docker = DockerApi::new_docker();
-        DockerApi::pull_image(&docker, AXON_IMAGE_NAME, AXON_IMAGE_TAG).await;
+    pub async fn find_container(
+        &self,
+        name: impl Into<Id>,
+    ) -> Result<Option<ContainerInspect200Response>> {
+        let inspect = self.docker.containers().get(name).inspect().await;
 
-        let cmd = vec!["./axon", file_para, genesis_para];
-        println!("cmd: {:?}", cmd);
-
-        let data_mapping = self.path.to_owned() + "/devtools" + ":/app/devtools";
-        let log_mapping = self.path.to_owned() + "/logs/" + name + ":/app/logs";
-        let vols = vec![data_mapping, log_mapping];
-        println!("mapping: {:?}", vols);
-        // prometheus collecting port from 8900-8903
-        let collect_port = 8900 + (port - 8000);
-        let opts = ContainerCreateOpts::builder(AXON_IMAGE_NAME.to_owned() + ":" + AXON_IMAGE_TAG)
-            .name(name)
-            .cmd(&cmd)
-            .restart_policy("always", 0)
-            .volumes(vols)
-            .working_dir("/app")
-            .network_mode("axon-net")
-            .expose(PublishPort::tcp(8000), port)
-            .expose(PublishPort::tcp(8100), collect_port)
-            .build();
-        match docker.containers().create(&opts).await {
-            Ok(info) => {
-                // println!("{:?}", info);
-                match info.start().await {
-                    Ok(_) => println!("Start {} ok", name),
-                    Err(err) => eprintln!("Start err {}", err),
-                }
-            }
-            Err(e) => eprintln!("Error: {}", e),
-        };
+        parse_inspect_result(inspect)
     }
 
-    pub async fn start_benchmark<P: AsRef<Path>>(benchmark_path: &P) {
-        let docker = DockerApi::new_docker();
-        DockerApi::pull_image(&docker, BM_IMAGE_NAME, "latest").await;
+    pub async fn remove_one_container(&self, name: impl AsRef<str>, force: bool) -> Result<()> {
+        let container = self.find_container(name.as_ref()).await?;
 
-        let cmd = vec!["node", "index.js", "--http_endpoint=http://172.17.0.1:8000"];
-        // let benchmark_path = "/home/wenyuan/git/axon-devops/benchmark/benchmark/";
-        let benchmark_path = benchmark_path.as_ref().to_str().unwrap();
-        let vols = vec![
-            benchmark_path.to_owned() + "/config.json:/benchmark/config.json",
-            benchmark_path.to_owned() + "/logs:/benchmark/logs",
-        ];
-
-        let opts = ContainerCreateOpts::builder(BM_IMAGE_NAME)
-            .name("bm")
-            .cmd(&cmd)
-            .volumes(vols)
-            .network_mode("axon-net")
-            .build();
-        async {
-            match docker.containers().create(&opts).await {
-                Ok(info) => {
-                    // println!("{:?}", info);
-                    match info.start().await {
-                        Ok(_) => println!("Start Benchmark Successfully"),
-                        Err(err) => eprintln!("Start err {}", err),
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    match docker.containers().get("bm").start().await {
-                        Ok(_) => println!("Exec Benchmark Successfully"),
-                        Err(err) => eprintln!("Exec err {}", err),
+        if let Some(container) = container {
+            let id = container.id.unwrap_or_else(|| "".to_string());
+            if !force {
+                if let Some(state) = container.state {
+                    if state.running == Some(true) {
+                        error!(
+                            "Can't remove running container {}, id: {}",
+                            name.as_ref(),
+                            id
+                        );
+                        return Ok(());
                     }
                 }
             }
+
+            let opts = RmContainerOpts::builder().force(force).build();
+
+            info!("Removing container {}, id: {}...", name.as_ref(), id);
+            self.docker
+                .containers()
+                .get(Id::from(name.as_ref()))
+                .remove(&opts)
+                .await?;
+            info!("Removed container {}, id: {}", name.as_ref(), id);
+        } else {
+            debug!("Couldn't found container {}", name.as_ref());
         }
-        .await;
+
+        Ok(())
+    }
+
+    pub async fn remove_containers<S: AsRef<str>, T: IntoIterator<Item = S>>(
+        &self,
+        names: T,
+        force: bool,
+    ) -> Result<()> {
+        futures::future::join_all(
+            names
+                .into_iter()
+                .map(|name| self.remove_one_container(name, force)),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<()>>()
+    }
+
+    pub async fn stop_one_container(&self, name: impl AsRef<str>) -> Result<()> {
+        let container = self.find_container(name.as_ref()).await?;
+
+        if let Some(container) = container {
+            let id = container.id.unwrap_or_else(|| "".to_string());
+            if let Some(state) = container.state {
+                if state.running == Some(false) {
+                    error!("Can't stop stopped container {}, id: {}", name.as_ref(), id);
+                    return Ok(());
+                }
+            }
+
+            info!("Stopping container {}, id: {}...", name.as_ref(), id);
+            self.docker
+                .containers()
+                .get(name.as_ref())
+                .stop(None)
+                .await?;
+            info!("Stopped container {}, id: {}", name.as_ref(), id);
+        } else {
+            debug!("Couldn't found container {}", name.as_ref());
+        }
+
+        Ok(())
+    }
+
+    pub async fn stop_containers<S: AsRef<str>, T: IntoIterator<Item = S>>(
+        &self,
+        names: T,
+    ) -> Result<()> {
+        futures::future::join_all(names.into_iter().map(|name| self.stop_one_container(name)))
+            .await
+            .into_iter()
+            .collect::<Result<()>>()
+    }
+
+    pub async fn ensure_container_running(
+        &self,
+        image: impl AsRef<str>,
+        tag: impl AsRef<str>,
+        name: impl AsRef<str>,
+        get_opts: impl FnOnce() -> ContainerCreateOpts,
+    ) -> Result<()> {
+        self.ensure_image(image.as_ref(), tag.as_ref()).await?;
+
+        let container = self.find_container(name.as_ref()).await?;
+
+        let id = if let Some(container) = container {
+            let id = container.id.unwrap_or_else(|| "".to_string());
+            debug!("Container {} is existed, id: {}", name.as_ref(), id);
+
+            if let Some(state) = container.state {
+                if state.running == Some(true) {
+                    error!("Container {} is already running, id: {}", name.as_ref(), id);
+                    return Ok(());
+                }
+            }
+
+            id
+        } else {
+            info!("Container {} does't exist, creating...", name.as_ref());
+            let container = self.docker.containers().create(&get_opts()).await?;
+            let id = container.id().to_string();
+            info!("Container {} has been created, id: {}", name.as_ref(), id);
+
+            id
+        };
+
+        self.docker.containers().get(name.as_ref()).start().await?;
+        info!("Container {} has started, id: {}", name.as_ref(), id);
+
+        Ok(())
+    }
+
+    pub async fn inspect_one_container(&self, name: impl AsRef<str>) -> Result<()> {
+        let container = self.find_container(name.as_ref()).await?;
+
+        let container = match container {
+            None => return Ok(()),
+            Some(val) => val,
+        };
+
+        info!(
+            "Container {} is {}, id: {}",
+            name.as_ref(),
+            container
+                .state
+                .map(|s| s.status.unwrap_or_else(|| "".to_string()))
+                .unwrap_or_else(|| "".to_string()),
+            container.id.unwrap_or_else(|| "".to_string()),
+        );
+
+        Ok(())
+    }
+
+    pub async fn inspect_containers<S: AsRef<str>, T: IntoIterator<Item = S>>(
+        &self,
+        names: T,
+    ) -> Result<()> {
+        futures::future::join_all(
+            names
+                .into_iter()
+                .map(|name| self.inspect_one_container(name)),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<()>>()
+    }
+
+    pub async fn remove_one_volume(&self, name: impl AsRef<str>) -> Result<()> {
+        let remove = self.docker.volumes().get(name.as_ref()).delete().await;
+
+        match parse_inspect_result(remove)? {
+            Some(_) => {
+                info!("Volume {} removed", name.as_ref());
+            }
+            None => {
+                error!("Volume {} doesn't exist", name.as_ref());
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn start_axon<
+        S0: AsRef<str>,
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        S3: AsRef<str>,
+        S4: AsRef<str>,
+        P: AsRef<Path>,
+    >(
+        &self,
+        args: StartAxonArgs<S0, S1, S2, S3, S4, P>,
+    ) -> Result<()> {
+        let StartAxonArgs {
+            name,
+            config_path,
+            genesis_path,
+            network,
+            data_volume,
+            path,
+            port,
+            p2p_port,
+            collecting_port,
+        } = args;
+
+        self.ensure_container_running(AXON_IMAGE_NAME, AXON_IMAGE_TAG, &name, || {
+            let cmd = [
+                "./axon".to_string(),
+                format!("-c=/app/nodes/{}", config_path.as_ref()),
+                format!("-g=/app/nodes/{}", genesis_path.as_ref()),
+            ];
+
+            let config_path = path.as_ref().join("nodes");
+            let logs_path = path.as_ref().join("logs");
+            let volumes = [
+                format!("{}:/app/nodes/data", data_volume.as_ref()),
+                format!("{}:/app/nodes", config_path.to_str().unwrap()),
+                format!("{}:/app/logs", logs_path.to_str().unwrap()),
+            ];
+
+            ContainerCreateOpts::builder(format!("{}:{}", AXON_IMAGE_NAME, AXON_IMAGE_TAG))
+                .name(name.as_ref())
+                .cmd(cmd)
+                .restart_policy("always", 0)
+                .volumes(volumes)
+                .working_dir("/app")
+                .network_mode(network.as_ref())
+                .expose(PublishPort::tcp(8000), port)
+                .expose(PublishPort::tcp(8001), p2p_port)
+                .expose(PublishPort::tcp(8100), collecting_port)
+                .build()
+        })
+        .await
+    }
+
+    pub async fn start_benchmark(
+        &self,
+        path: impl AsRef<Path>,
+        http_endpoint: impl AsRef<str>,
+        network: impl AsRef<str>,
+    ) -> Result<()> {
+        self.ensure_container_running(
+            BENCHMARK_IMAGE_NAME,
+            BENCHMARK_IMAGE_TAG,
+            "benchmark",
+            || {
+                let config_path = path.as_ref().join("config.json");
+                let logs_path = path.as_ref().join("logs");
+                let vols = vec![
+                    format!("{}:/benchmark/config.json", config_path.to_str().unwrap()),
+                    format!("{}:/benchmark/logs", logs_path.to_str().unwrap()),
+                ];
+
+                ContainerCreateOpts::builder(BENCHMARK_IMAGE_NAME)
+                    .name("benchmark")
+                    .cmd([
+                        "node",
+                        "index.js",
+                        &format!("--http_endpoint={}", http_endpoint.as_ref()),
+                    ])
+                    .volumes(vols)
+                    .network_mode(network.as_ref())
+                    .build()
+            },
+        )
+        .await
     }
 
     pub fn get_var(var_path: &str, key: &str) -> std::io::Result<Option<String>> {
@@ -153,20 +439,20 @@ impl DockerApi {
         Ok(var_val)
     }
 
-    pub async fn start_monitor(path: &str) {
+    pub async fn start_monitor(&self, path: &str) {
         let monitor_var_path = path.to_owned() + "/deploy/roles/monitor/vars/main.yaml";
         println!("monitor var path {}", monitor_var_path);
         let var_key = "monitor_dir";
         if let Ok(monitor_dir_opt) = DockerApi::get_var(monitor_var_path.as_str(), var_key) {
             if let Some(monitor_dir) = monitor_dir_opt {
                 // println!("monitor dir:{}", monitor_dir);
-                DockerApi::start_grafana(&monitor_dir).await;
-                DockerApi::start_grafana_renderer().await;
-                DockerApi::start_prometheus(&monitor_dir).await;
-                DockerApi::start_elasticsearch(&monitor_dir).await;
-                DockerApi::start_jaeger_collector().await;
-                DockerApi::start_jaeger_query().await;
-                DockerApi::start_elastalert(&monitor_dir).await;
+                self.start_grafana(&monitor_dir).await;
+                self.start_grafana_renderer().await;
+                self.start_prometheus(&monitor_dir).await;
+                self.start_elasticsearch(&monitor_dir).await;
+                self.start_jaeger_collector().await;
+                self.start_jaeger_query().await;
+                self.start_elastalert(&monitor_dir).await;
             } else {
                 println!("Key {} not exist!", var_key);
             }
@@ -175,7 +461,7 @@ impl DockerApi {
         }
     }
 
-    pub async fn start_agent(path: &str) {
+    pub async fn start_agent(&self, path: &str) {
         let agent_var_path = path.to_owned() + "/deploy/roles/agent/vars/main.yaml";
         println!("agent var path {}", agent_var_path);
         let var_key = "monitor_agent_dir";
@@ -190,10 +476,11 @@ impl DockerApi {
                         .unwrap()
                         .unwrap();
                 monitor_address += ":8201";
-                DockerApi::start_node_exporter().await;
-                DockerApi::start_jaeger_agent(&monitor_address).await;
-                DockerApi::start_promtail(&agent_dir, &log_path).await;
-                DockerApi::start_filebeat(&agent_dir, &log_path).await;
+
+                self.start_node_exporter().await;
+                self.start_jaeger_agent(&monitor_address).await;
+                self.start_promtail(&agent_dir, &log_path).await;
+                self.start_filebeat(&agent_dir, &log_path).await;
             } else {
                 println!("Key {} not exist!", var_key);
             }
@@ -202,8 +489,8 @@ impl DockerApi {
         }
     }
 
-    pub async fn stop_monitor() {
-        let monitor_names = vec![
+    pub async fn stop_monitor(&self) {
+        self.stop_containers([
             "axon-grafana",
             "axon-grafana-image-renderer",
             "prometheus",
@@ -211,29 +498,18 @@ impl DockerApi {
             "jaeger-collector",
             "jaeger-query",
             "elk-elastalert",
-        ];
-        DockerApi::stop_containers(monitor_names).await;
+        ])
+        .await;
     }
 
-    pub async fn stop_agent() {
-        let agent_names = vec![
+    pub async fn stop_agent(&self) {
+        self.stop_containers([
             "axon-node-exporter",
             "jaeger-agent",
             "axon-promtail",
             "axon-filebeat",
-        ];
-        DockerApi::stop_containers(agent_names).await;
-    }
-
-    async fn stop_containers(names: Vec<&str>) {
-        let docker = DockerApi::new_docker();
-        for name in names {
-            let result = docker.containers().get(name).stop(None).await;
-            match result {
-                Ok(_) => println!("Stop {} Ok", name),
-                Err(err) => println!("Stop {} Err {}", name, err),
-            }
-        }
+        ])
+        .await;
     }
 
     pub async fn clean(path: &str) {
@@ -257,11 +533,10 @@ impl DockerApi {
         }
     }
 
-    async fn start_grafana(dir: &str) {
-        let docker = DockerApi::new_docker();
+    async fn start_grafana(&self, dir: &str) {
         let image_name = "grafana/grafana";
         let image_tag = "master";
-        DockerApi::pull_image(&docker, image_name, image_tag).await;
+        self.ensure_image(image_name, image_tag).await;
 
         let vols = vec![
             dir.to_owned() + "/config/grafana/grafana.ini:/etc/grafana/grafana.ini",
@@ -287,14 +562,13 @@ impl DockerApi {
             .build();
         // println!("opts {:?}", opts);
         println!("Start: {}", name);
-        DockerApi::start_container(opts).await;
+        self.start_container(opts).await;
     }
 
-    async fn start_grafana_renderer() {
-        let docker = DockerApi::new_docker();
+    async fn start_grafana_renderer(&self) {
         let image_name = "grafana/grafana-image-renderer";
         let image_tag = "2.0.0";
-        DockerApi::pull_image(&docker, image_name, image_tag).await;
+        self.ensure_image(image_name, image_tag).await;
         let name = "axon-grafana-image-renderer";
         let opts = ContainerCreateOpts::builder(image_name.to_owned() + ":" + image_tag)
             .name(name)
@@ -303,14 +577,13 @@ impl DockerApi {
             .build();
         // println!("opts {:?}", opts);
         println!("Start: {}", name);
-        DockerApi::start_container(opts).await;
+        self.start_container(opts).await;
     }
 
-    async fn start_prometheus(dir: &str) {
-        let docker = DockerApi::new_docker();
+    async fn start_prometheus(&self, dir: &str) {
         let image_name = "prom/prometheus";
         let image_tag = "v2.32.1";
-        DockerApi::pull_image(&docker, image_name, image_tag).await;
+        self.ensure_image(image_name, image_tag).await;
         let vols = vec![
             dir.to_owned() + "/config/promethues/prometheus.yml:/etc/prometheus/prometheus.yml",
             dir.to_owned() + "/data/prometheus:/prometheus",
@@ -334,14 +607,13 @@ impl DockerApi {
             .build();
         // println!("opts {:?}", opts);
         println!("Start: {}", name);
-        DockerApi::start_container(opts).await;
+        self.start_container(opts).await;
     }
 
-    async fn start_elasticsearch(dir: &str) {
-        let docker = DockerApi::new_docker();
+    async fn start_elasticsearch(&self, dir: &str) {
         let image_name = "docker.elastic.co/elasticsearch/elasticsearch";
         let image_tag = "7.6.2";
-        DockerApi::pull_image(&docker, image_name, image_tag).await;
+        self.ensure_image(image_name, image_tag).await;
 
         let vols = vec![dir.to_owned() + "/data/es:/usr/share/elasticsearch/data"];
         let env = vec![
@@ -365,14 +637,13 @@ impl DockerApi {
             .build();
         // println!("opts {:?}", opts);
         println!("Start: {}", name);
-        DockerApi::start_container(opts).await;
+        self.start_container(opts).await;
     }
 
-    async fn start_jaeger_collector() {
-        let docker = DockerApi::new_docker();
+    async fn start_jaeger_collector(&self) {
         let image_name = "jaegertracing/jaeger-collector";
         let image_tag = "1.32";
-        DockerApi::pull_image(&docker, image_name, image_tag).await;
+        self.ensure_image(image_name, image_tag).await;
 
         let env = vec!["SPAN_STORAGE_TYPE=elasticsearch"];
         let cmd = vec![
@@ -396,14 +667,13 @@ impl DockerApi {
             .build();
         // println!("opts {:?}", opts);
         println!("Start: {}", name);
-        DockerApi::start_container(opts).await;
+        self.start_container(opts).await;
     }
 
-    async fn start_jaeger_query() {
-        let docker = DockerApi::new_docker();
+    async fn start_jaeger_query(&self) {
         let image_name = "jaegertracing/jaeger-query";
         let image_tag = "1.32";
-        DockerApi::pull_image(&docker, image_name, image_tag).await;
+        self.ensure_image(image_name, image_tag).await;
 
         let env = vec!["SPAN_STORAGE_TYPE=elasticsearch", "no_proxy=localhost"];
         let cmd = vec![
@@ -425,14 +695,13 @@ impl DockerApi {
             .build();
         // println!("opts {:?}", opts);
         println!("Start: {}", name);
-        DockerApi::start_container(opts).await;
+        self.start_container(opts).await;
     }
 
-    async fn start_elastalert(dir: &str) {
-        let docker = DockerApi::new_docker();
+    async fn start_elastalert(&self, dir: &str) {
         let image_name = "praecoapp/elastalert-server";
         let image_tag = "20210704";
-        DockerApi::pull_image(&docker, image_name, image_tag).await;
+        self.ensure_image(image_name, image_tag).await;
 
         let vols = vec![
             dir.to_owned() + "/config/elastalert2/elastalert.yaml:/opt/elastalert/config.yaml",
@@ -453,14 +722,13 @@ impl DockerApi {
             .build();
         // println!("opts {:?}", opts);
         println!("Start: {}", name);
-        DockerApi::start_container(opts).await;
+        self.start_container(opts).await;
     }
 
-    async fn start_node_exporter() {
-        let docker = DockerApi::new_docker();
+    async fn start_node_exporter(&self) {
         let image_name = "quay.io/prometheus/node-exporter";
         let image_tag = "v0.18.1";
-        DockerApi::pull_image(&docker, image_name, image_tag).await;
+        self.ensure_image(image_name, image_tag).await;
 
         let cmd = vec![
             "--path.rootfs=/host",
@@ -479,14 +747,13 @@ impl DockerApi {
             .build();
         // println!("opts {:?}", opts);
         println!("Start: {}", name);
-        DockerApi::start_container(opts).await;
+        self.start_container(opts).await;
     }
 
-    async fn start_jaeger_agent(addr: &str) {
-        let docker = DockerApi::new_docker();
+    async fn start_jaeger_agent(&self, addr: &str) {
         let image_name = "jaegertracing/jaeger-agent";
         let image_tag = "1.32";
-        DockerApi::pull_image(&docker, image_name, image_tag).await;
+        self.ensure_image(image_name, image_tag).await;
 
         // let cmd = vec!["--reporter.grpc.host-port=${JACGER_COLLECTOR_ADDRESS}"];
         let cmd = vec!["--reporter.grpc.host-port=".to_owned() + addr];
@@ -504,14 +771,13 @@ impl DockerApi {
             .build();
         // println!("opts {:?}", opts);
         println!("Start: {}", name);
-        DockerApi::start_container(opts).await;
+        self.start_container(opts).await;
     }
 
-    async fn start_promtail(dir: &str, log_path: &str) {
-        let docker = DockerApi::new_docker();
+    async fn start_promtail(&self, dir: &str, log_path: &str) {
         let image_name = "grafana/promtail";
         let image_tag = "master-9ad98df";
-        DockerApi::pull_image(&docker, image_name, image_tag).await;
+        self.ensure_image(image_name, image_tag).await;
 
         let vols = vec![
             dir.to_owned() + "/data/promtail/positions:/tmp/promtail/",
@@ -532,14 +798,13 @@ impl DockerApi {
             .build();
         // println!("opts {:?}", opts);
         println!("Start: {}", name);
-        DockerApi::start_container(opts).await;
+        self.start_container(opts).await;
     }
 
-    async fn start_filebeat(dir: &str, log_path: &str) {
-        let docker = DockerApi::new_docker();
+    async fn start_filebeat(&self, dir: &str, log_path: &str) {
         let image_name = "docker.elastic.co/beats/filebeat";
         let image_tag = "7.2.0";
-        DockerApi::pull_image(&docker, image_name, image_tag).await;
+        self.ensure_image(image_name, image_tag).await;
 
         let vols = vec![
             "/var/run/docker.sock:/host_docker/docker.sock".to_string(),
@@ -560,12 +825,11 @@ impl DockerApi {
             .build();
         // println!("opts {:?}", opts);
         println!("Start: {}", name);
-        DockerApi::start_container(opts).await;
+        self.start_container(opts).await;
     }
 
-    async fn start_container(opts: ContainerCreateOpts) {
-        let docker = DockerApi::new_docker();
-        match docker.containers().create(&opts).await {
+    async fn start_container(&self, opts: ContainerCreateOpts) {
+        match self.docker.containers().create(&opts).await {
             Ok(container) => {
                 // println!("{:?}", container);
                 match container.start().await {

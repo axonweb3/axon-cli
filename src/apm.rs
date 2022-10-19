@@ -1,14 +1,16 @@
-use crate::{docker::DockerApi, sub_command::SubCommand};
+use std::{error::Error as StdErr, process};
+
 use async_trait::async_trait;
 use clap::{Arg, ArgMatches, Command};
-use std::{error::Error as StdErr, process};
+
+use crate::{docker::DockerApi, sub_command::SubCommand};
 
 #[derive(Debug, Default)]
 pub struct Apm {}
 
 #[async_trait]
 impl SubCommand for Apm {
-    fn get_command(&self) -> Command<'static> {
+    fn get_command(&self) -> Command {
         Command::new("apm")
             .about("Application Performance Management")
             .subcommand(
@@ -49,17 +51,18 @@ impl SubCommand for Apm {
                     .expect("Start apm exception!!!");
 
                 println!("Start monitors!!");
-                DockerApi::start_monitor(path).await;
+                DockerApi::new_default().unwrap().start_monitor(path).await;
                 println!("Sleeping 30 seconds!!");
                 let thirty_secs = std::time::Duration::from_secs(30);
                 std::thread::sleep(thirty_secs);
                 println!("\nStart agents!!");
-                DockerApi::start_agent(path).await;
+                DockerApi::new_default().unwrap().start_agent(path).await;
                 Ok(())
             }
             Some(("stop", _)) => {
-                DockerApi::stop_monitor().await;
-                DockerApi::stop_agent().await;
+                let docker_api = DockerApi::new_default().unwrap();
+                docker_api.stop_monitor().await;
+                docker_api.stop_agent().await;
                 Ok(())
             }
             Some(("clean", matches)) => {

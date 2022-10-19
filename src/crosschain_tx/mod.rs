@@ -6,9 +6,12 @@ mod constants;
 mod crosschain;
 mod helper;
 
+use std::{error::Error as StdErr, ops::Mul, str::FromStr, sync::mpsc::channel};
+
 use ckb_crypto::secp::Privkey;
 use ckb_fixed_hash_core::H256;
 use ckb_hash::{blake2b_256, new_blake2b};
+use ckb_jsonrpc_types as json_types;
 use ckb_sdk::{
     traits::{CellCollector, CellQueryOptions, DefaultCellCollector, ValueRangeOption},
     CkbRpcClient, SECP256K1,
@@ -23,14 +26,12 @@ use ckb_types::{
     prelude::*,
 };
 use clap::{Arg, ArgMatches, Command, Parser};
-use std::{error::Error as StdErr, ops::Mul, str::FromStr, sync::mpsc::channel};
+use crossbeam_utils::thread;
 
 use crate::{
     crosschain_tx::{constants::*, helper::*},
     sub_command::SubCommand,
 };
-use ckb_jsonrpc_types as json_types;
-use crossbeam_utils::thread;
 
 #[derive(Parser, Debug, Default)]
 #[clap(author, version, about, long_about = None)]
@@ -68,7 +69,7 @@ pub struct CrossChain {}
 
 #[async_trait]
 impl SubCommand for CrossChain {
-    fn get_command(&self) -> Command<'static> {
+    fn get_command(&self) -> Command {
         Command::new("cs")
             .about("CKB AXON Crosschain")
             .arg(
@@ -224,8 +225,7 @@ impl CrossChain {
 
         thread::scope(|s| {
             s.spawn(move |_| {
-                let mut cell_collector =
-                    DefaultCellCollector::new(args.ckb_indexer.as_str(), args.ckb_rpc.as_str());
+                let mut cell_collector = DefaultCellCollector::new(args.ckb_rpc.as_str());
                 let result = cell_collector.collect_live_cells(&query, false);
                 match result {
                     Ok(ok) => {
