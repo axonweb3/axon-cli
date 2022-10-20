@@ -14,8 +14,8 @@ use axon_protocol::{
 };
 use clap::Args;
 use ethers_core::abi::{Contract, Token};
-use log::info;
-use ophelia::{PrivateKey, PublicKey, Signature, ToBlsPublicKey};
+use log::{error, info};
+use ophelia::{PrivateKey, PublicKey, Signature, ToBlsPublicKey, ToPublicKey};
 use ophelia_blst::BlsPrivateKey;
 use ophelia_secp256k1::Secp256k1RecoverablePrivateKey;
 use rand::rngs::OsRng;
@@ -41,6 +41,10 @@ pub struct KeygenArgs {
     /// the output path for key pairs file
     #[clap(short, long, default_value=*DEFAULT_NODE_KEY_PAIRS_PATH)]
     path: String,
+
+    /// private keys are seperated by ',', extra keys will be randomly generated
+    #[clap(short = 'P', long, value_delimiter = ',')]
+    private_keys: Vec<String>,
 }
 
 #[derive(Args, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
@@ -56,6 +60,11 @@ pub struct ConfigGenArgs {
     /// the p2p address of nodes
     #[clap(short, long, value_delimiter = ',')]
     addresses: Vec<String>,
+
+    /// the private key to send transactions in genesis block, default to the
+    /// first key pair
+    #[clap(short = 'P', long)]
+    private_key: Option<String>,
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -78,10 +87,10 @@ struct KeyPairsList {
     key_pairs: Vec<KeyPair>,
 }
 
-fn generate_one_key_pair(
+fn get_key_pair_from_private_key(
     common_ref: &<BlsPrivateKey as ToBlsPublicKey>::CommonReference,
+    bls_private_key: BlsPrivateKey,
 ) -> Result<KeyPair> {
-    let bls_private_key = BlsPrivateKey::generate(&mut OsRng);
     let bls_private_key_raw = bls_private_key.to_bytes();
 
     let bls_public_key_raw = bls_private_key.pub_key(common_ref).to_bytes();
@@ -123,13 +132,22 @@ pub fn generate_key_pairs(args: &KeygenArgs) -> Result<()> {
     let KeygenArgs {
         number,
         path: path_str,
-        ..
+        private_keys,
     } = args;
+    let provided_len = private_keys.len();
     let path: &Path = path_str.as_ref();
 
     let common_ref = "0x0".to_string();
-    let key_pairs = (0..*number)
-        .map(|_| generate_one_key_pair(&common_ref))
+    let key_pairs = (0..usize::try_from(*number)?)
+        .map(|i| {
+            let bls_private_key = if i < provided_len {
+                BlsPrivateKey::try_from(hex_decode(&private_keys[i])?.as_slice())?
+            } else {
+                BlsPrivateKey::generate(&mut OsRng)
+            };
+
+            get_key_pair_from_private_key(&common_ref, bls_private_key)
+        })
         .collect::<Result<Vec<_>>>()?;
 
     if let Some(parent) = path.parent() {
@@ -250,6 +268,7 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
         key_pairs_path,
         path: path_str,
         addresses,
+        private_key,
     } = args;
 
     let path: &Path = path_str.as_ref();
@@ -276,6 +295,13 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
 
     let KeyPairsList { key_pairs, .. } = from_json_file(key_pairs_path)?;
 
+    let first_key_pair = if let Some(key_pair) = key_pairs.first() {
+        key_pair
+    } else {
+        error!("No key pair provided, see \"axon keygen\" to generate key pairs");
+        return Ok(());
+    };
+
     metadata.to_mut().verifier_list = key_pairs
         .iter()
         .map(
@@ -299,15 +325,22 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
     let chain_id = genesis.block.header.chain_id;
     let fee_per_gas = genesis.block.header.base_fee_per_gas;
 
-    let private_key = Secp256k1RecoverablePrivateKey::try_from(
-        key_pairs
-            .first()
-            .unwrap()
-            .bls_private_key
-            .as_bytes()
-            .as_ref(),
-    )?;
-    let address = key_pairs.first().unwrap().address;
+    let (private_key, address) = match private_key {
+        Some(private_key) => {
+            let private_key =
+                Secp256k1RecoverablePrivateKey::try_from(hex_decode(private_key)?.as_slice())?;
+            let public_key = private_key.pub_key();
+
+            let address = Address::from_pubkey_bytes(public_key.to_bytes())?;
+            (private_key, address.0)
+        }
+        None => (
+            Secp256k1RecoverablePrivateKey::try_from(
+                first_key_pair.bls_private_key.as_bytes().as_ref(),
+            )?,
+            first_key_pair.address,
+        ),
+    };
 
     let metadata_address = contract_address(&address, 0);
     let wckb_address = contract_address(&address, 1);
@@ -471,6 +504,7 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
                     "{CROSS_CHAIN_CONTRACT_ADDRESS}",
                     &format!("0x{cross_chain_proxy_address:x}"),
                 )
+                .replace("{WCKB_CONTRACT_ADDRESS}", &format!("0x{wckb_address:x}"))
                 .replace("{NETWORK_BOOTSTRAPS}", &bootstraps);
 
             write(path.join(format!("config_{index}.toml")), config.as_bytes())?;

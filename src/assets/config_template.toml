@@ -8,6 +8,7 @@ epoch_len = 100_000_000
 
 metadata_contract_address = "{METADATA_CONTRACT_ADDRESS}"
 crosschain_contract_address = "{CROSS_CHAIN_CONTRACT_ADDRESS}"
+wckb_contract_address = "{WCKB_CONTRACT_ADDRESS}"
 
 [accounts]
 mnemonic = "test test test test test test test test test test test junk"
