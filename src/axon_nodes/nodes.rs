@@ -58,10 +58,8 @@ pub async fn start_nodes(args: StartNodesArgs) -> docker_api::errors::Result<()>
     docker_api.ensure_network(&network).await?;
 
     if !(0..num).all(|i| {
-        let path_str = format!("config_{}.toml", i + 1);
-        let path: &std::path::Path = path_str.as_ref();
-
-        path.exists()
+        let path: &std::path::Path = path.as_ref();
+        path.join("nodes").join(format!("config_{}.toml", i + 1)).exists()
     }) {
         error!("Not enough config files to start {num} nodes, see \"axon keygen\" and \"axon config-gen\" to generate config files");
         return Ok(());
