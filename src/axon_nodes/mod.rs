@@ -1,8 +1,6 @@
 mod config;
 mod nodes;
 
-use std::error::Error as StdErr;
-
 use async_trait::async_trait;
 use clap::{ArgMatches, Command, FromArgMatches, Subcommand};
 
@@ -14,7 +12,7 @@ use crate::{
     constants::{DEFAULT_AXON_DATA_VOLUME, DEFAULT_NODE_KEY_PAIRS_PATH},
     docker::DockerApi,
     sub_command::SubCommand,
-    types::{DockerArgs, RmContainerArgs},
+    types::{DockerArgs, Result, RmContainerArgs},
 };
 
 #[derive(Default)]
@@ -64,7 +62,7 @@ impl SubCommand for AxonNodes {
         AxonNodesActions::augment_subcommands(Command::new("axon")).about("Manage Axon nodes")
     }
 
-    async fn exec_command(&self, matches: &ArgMatches) -> Result<(), Box<dyn StdErr>> {
+    async fn exec_command(&self, matches: &ArgMatches) -> Result<()> {
         match AxonNodesActions::from_arg_matches(matches)? {
             AxonNodesActions::Start(args) => {
                 start_nodes(args).await?;

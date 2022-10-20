@@ -27,3 +27,6 @@ pub struct ContractJson<'a> {
     #[serde(borrow)]
     pub abi: &'a serde_json::value::RawValue,
 }
+
+pub type Error = Box<dyn std::error::Error>;
+pub type Result<T> = std::result::Result<T, Error>;

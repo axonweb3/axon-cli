@@ -1,9 +1,9 @@
-use std::{error::Error as StdErr, process};
+use std::process;
 
 use async_trait::async_trait;
 use clap::{Arg, ArgMatches, Command};
 
-use crate::{docker::DockerApi, sub_command::SubCommand};
+use crate::{docker::DockerApi, sub_command::SubCommand, types::Result};
 
 #[derive(Debug, Default)]
 pub struct Apm {}
@@ -40,7 +40,7 @@ impl SubCommand for Apm {
             )
     }
 
-    async fn exec_command(&self, matches: &ArgMatches) -> Result<(), Box<dyn StdErr>> {
+    async fn exec_command(&self, matches: &ArgMatches) -> Result<()> {
         match matches.subcommand() {
             Some(("start", matches)) => {
                 let path = matches.value_of("path").unwrap_or("");

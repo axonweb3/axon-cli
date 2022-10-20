@@ -1,6 +1,5 @@
 use std::{
     borrow::Cow,
-    error::Error as StdErr,
     fs::{create_dir_all, read_to_string, write, File},
     io::BufReader,
     path::Path,
@@ -23,10 +22,14 @@ use rand::rngs::OsRng;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tentacle_secio::SecioKeyPair;
 
-use crate::constants::{
-    CONFIG_TEMPLATE, CROSS_CHAIN_ABI, CROSS_CHAIN_CONTRACT, DB_OPTION_TEMPLATE, DEFAULT_NODES_PATH,
-    DEFAULT_NODE_KEY_PAIRS_PATH, GENESIS_TEMPLATE, METADATA_ABI, METADATA_CONTRACT,
-    METADATA_TEMPLATE, PROXY_ABI, PROXY_CONTRACT, TOKEN_ABI, TOKEN_CONTRACT, VALIDATOR_TEMPLATE,
+use crate::{
+    constants::{
+        CONFIG_TEMPLATE, CROSS_CHAIN_ABI, CROSS_CHAIN_CONTRACT, DB_OPTION_TEMPLATE,
+        DEFAULT_NODES_PATH, DEFAULT_NODE_KEY_PAIRS_PATH, GENESIS_TEMPLATE, METADATA_ABI,
+        METADATA_CONTRACT, METADATA_TEMPLATE, PROXY_ABI, PROXY_CONTRACT, TOKEN_ABI, TOKEN_CONTRACT,
+        VALIDATOR_TEMPLATE,
+    },
+    types::Result,
 };
 
 #[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
@@ -77,7 +80,7 @@ struct KeyPairsList {
 
 fn generate_one_key_pair(
     common_ref: &<BlsPrivateKey as ToBlsPublicKey>::CommonReference,
-) -> Result<KeyPair, Box<dyn StdErr>> {
+) -> Result<KeyPair> {
     let bls_private_key = BlsPrivateKey::generate(&mut OsRng);
     let bls_private_key_raw = bls_private_key.to_bytes();
 
@@ -90,7 +93,7 @@ fn generate_one_key_pair(
 
     let address = Address::from_pubkey_bytes(&secp256k1_public_key_raw)?;
 
-    Ok::<_, Box<dyn StdErr>>(KeyPair {
+    Ok(KeyPair {
         bls_private_key: Hex::encode(bls_private_key_raw),
         bls_public_key: Hex::encode(bls_public_key_raw),
         secp256k1_public_key: Hex::encode(secp256k1_public_key_raw),
@@ -99,14 +102,14 @@ fn generate_one_key_pair(
     })
 }
 
-fn from_json_file<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, Box<dyn StdErr>> {
+fn from_json_file<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T> {
     let file = File::open(path.as_ref())?;
     let reader = BufReader::new(file);
 
     Ok(serde_json::from_reader(reader)?)
 }
 
-fn to_json_file<T: Serialize>(val: &T, path: impl AsRef<Path>) -> Result<(), Box<dyn StdErr>> {
+fn to_json_file<T: Serialize>(val: &T, path: impl AsRef<Path>) -> Result<()> {
     let file = File::create(path.as_ref())?;
 
     serde_json::to_writer_pretty(&file, val)?;
@@ -116,7 +119,7 @@ fn to_json_file<T: Serialize>(val: &T, path: impl AsRef<Path>) -> Result<(), Box
     Ok(())
 }
 
-pub fn generate_key_pairs(args: &KeygenArgs) -> Result<(), Box<dyn StdErr>> {
+pub fn generate_key_pairs(args: &KeygenArgs) -> Result<()> {
     let KeygenArgs {
         number,
         path: path_str,
@@ -127,7 +130,7 @@ pub fn generate_key_pairs(args: &KeygenArgs) -> Result<(), Box<dyn StdErr>> {
     let common_ref = "0x0".to_string();
     let key_pairs = (0..*number)
         .map(|_| generate_one_key_pair(&common_ref))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>>>()?;
 
     if let Some(parent) = path.parent() {
         create_dir_all(parent)?;
@@ -146,7 +149,7 @@ pub fn generate_key_pairs(args: &KeygenArgs) -> Result<(), Box<dyn StdErr>> {
     Ok(())
 }
 
-pub fn log_key_pairs(path: impl AsRef<Path>) -> Result<(), Box<dyn StdErr>> {
+pub fn log_key_pairs(path: impl AsRef<Path>) -> Result<()> {
     let key_pairs_list: KeyPairsList = from_json_file(path)?;
 
     info!("Key pairs logged to stdout (to avoid being recorded)");
@@ -155,13 +158,10 @@ pub fn log_key_pairs(path: impl AsRef<Path>) -> Result<(), Box<dyn StdErr>> {
     Ok(())
 }
 
-fn read_or_create_json_template<
-    'a,
-    T: DeserializeOwned + ToOwned<Owned = T> + Serialize + ?Sized,
->(
+fn read_or_create_json_template<T: DeserializeOwned + ToOwned<Owned = T> + Serialize + ?Sized>(
     path_ref: impl AsRef<Path>,
-    val: &'a T,
-) -> Result<Cow<'a, T>, Box<dyn StdErr>> {
+    val: &T,
+) -> Result<Cow<T>> {
     let path = path_ref.as_ref();
 
     let result = if path.exists() {
@@ -177,10 +177,10 @@ fn read_or_create_json_template<
     Ok(result)
 }
 
-fn read_or_create_plain_template<'a, V: ?Sized + AsRef<str>>(
+fn read_or_create_plain_template<V: ?Sized + AsRef<str>>(
     path_ref: impl AsRef<Path>,
-    val: &'a V,
-) -> Result<Cow<'a, str>, Box<dyn StdErr>> {
+    val: &V,
+) -> Result<Cow<str>> {
     let path = path_ref.as_ref();
 
     let result = if path.exists() {
@@ -245,7 +245,7 @@ fn contract_address(address: &H160, nonce: u32) -> H160 {
     .into()
 }
 
-pub fn generate_configs(args: &ConfigGenArgs) -> Result<(), Box<dyn StdErr>> {
+pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
     let ConfigGenArgs {
         key_pairs_path,
         path: path_str,
@@ -477,7 +477,7 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<(), Box<dyn StdErr>> {
 
             info!("Config file {index} generated");
 
-            Ok::<(), Box<dyn StdErr>>(())
+            Result::Ok(())
         })?;
 
     Ok(())

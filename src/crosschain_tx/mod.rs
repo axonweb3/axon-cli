@@ -6,7 +6,7 @@ mod constants;
 mod crosschain;
 mod helper;
 
-use std::{error::Error as StdErr, ops::Mul, str::FromStr, sync::mpsc::channel};
+use std::{ops::Mul, str::FromStr, sync::mpsc::channel};
 
 use ckb_crypto::secp::Privkey;
 use ckb_fixed_hash_core::H256;
@@ -31,6 +31,7 @@ use crossbeam_utils::thread;
 use crate::{
     crosschain_tx::{constants::*, helper::*},
     sub_command::SubCommand,
+    types::Result,
 };
 
 #[derive(Parser, Debug, Default)]
@@ -62,7 +63,7 @@ pub enum SendTxError {
     CollectorErr(String),
     ExecErr(String),
 }
-impl StdErr for SendTxError {}
+impl std::error::Error for SendTxError {}
 
 #[derive(Debug, Default)]
 pub struct CrossChain {}
@@ -126,7 +127,7 @@ impl SubCommand for CrossChain {
             )
     }
 
-    async fn exec_command(&self, cs_matches: &ArgMatches) -> Result<(), Box<dyn StdErr>> {
+    async fn exec_command(&self, cs_matches: &ArgMatches) -> Result<()> {
         // Parse arguments
         let args = Args {
             tx_type:     cs_matches
@@ -213,7 +214,7 @@ impl CrossChain {
     fn update_input_cells(
         args: &Args,
         base_query: CellQueryOptions,
-    ) -> Result<(CellInput, ScriptOpt, u64), Box<dyn StdErr>> {
+    ) -> Result<(CellInput, ScriptOpt, u64)> {
         let query = {
             let mut query = base_query;
             // query will stop if collected celles contain more capacity than this
@@ -232,10 +233,7 @@ impl CrossChain {
                         let more_cells = ok.0;
                         println!("live cell size: {}", more_cells.len());
                         if more_cells.is_empty() {
-                            tx.send(Err(
-                                Box::new(SendTxError::NoLiveCell) as Box<dyn StdErr + Send + Sync>
-                            ))
-                            .unwrap();
+                            tx.send(Err(SendTxError::NoLiveCell)).unwrap();
                         } else {
                             let mut max_cap: u64 = more_cells[0].output.capacity().unpack();
                             let mut max_cell = more_cells[0].clone();
@@ -259,19 +257,14 @@ impl CrossChain {
                     }
                     Err(err) => {
                         let err_msg = err.to_string();
-                        tx.send(Err(Box::new(SendTxError::CollectorErr(err_msg))
-                            as Box<dyn StdErr + Send + Sync>))
-                            .unwrap();
+                        tx.send(Err(SendTxError::CollectorErr(err_msg))).unwrap();
                     }
                 }
             });
         })
         .unwrap();
 
-        match rx.recv().unwrap() {
-            Ok(ok) => Ok(ok),
-            Err(err) => Err(err as Box<dyn StdErr>),
-        }
+        Ok(rx.recv().unwrap()?)
     }
 
     fn build_signed_tx(
@@ -280,7 +273,7 @@ impl CrossChain {
         outputs_data: Vec<PackedBytes>,
         cell_deps: Vec<CellDep>,
         args: &Args,
-    ) -> Result<TransactionView, Box<dyn StdErr>> {
+    ) -> Result<TransactionView> {
         let tx = TransactionBuilder::default()
             .input(input)
             .outputs(outputs)
@@ -322,7 +315,7 @@ impl CrossChain {
         args: &Args,
         sender: Script,
         secp256k1_data_dep: CellDep,
-    ) -> Result<TransactionView, Box<dyn StdErr>> {
+    ) -> Result<TransactionView> {
         let deploy_type = CrossChain::build_script(
             TYPE_ID_CODE_HASH,
             ScriptHashType::Type,
@@ -362,7 +355,7 @@ impl CrossChain {
         args: &Args,
         sender: Script,
         secp256k1_data_dep: CellDep,
-    ) -> Result<TransactionView, Box<dyn StdErr>> {
+    ) -> Result<TransactionView> {
         let mut base_query = CellQueryOptions::new_lock(sender.clone());
         base_query.data_len_range = Some(ValueRangeOption::new_exact(0));
         let (input, _, input_cap) = CrossChain::update_input_cells(args, base_query)?;
@@ -401,7 +394,7 @@ impl CrossChain {
         args: &Args,
         sender: Script,
         secp256k1_data_dep: CellDep,
-    ) -> Result<TransactionView, Box<dyn StdErr>> {
+    ) -> Result<TransactionView> {
         let is_sudt = args.sudt_amount > 0.0;
         let mut base_query = CellQueryOptions::new_lock(sender.clone());
         base_query.data_len_range = Some(ValueRangeOption::new_exact(0));

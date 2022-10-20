@@ -4,7 +4,7 @@ use log::error;
 use crate::{
     constants::{DEFAULT_AXON_DATA_VOLUME, DEFAULT_AXON_NETWORK_NAME, DEFAULT_AXON_PATH},
     docker::{DockerApi, StartAxonArgs},
-    types::{DockerArgs, RmContainerArgs},
+    types::{DockerArgs, Result, RmContainerArgs},
 };
 
 #[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
@@ -41,7 +41,7 @@ pub struct StartNodesArgs {
     docker_args: DockerArgs,
 }
 
-pub async fn start_nodes(args: StartNodesArgs) -> docker_api::errors::Result<()> {
+pub async fn start_nodes(args: StartNodesArgs) -> Result<()> {
     let StartNodesArgs {
         network,
         path,
@@ -59,13 +59,15 @@ pub async fn start_nodes(args: StartNodesArgs) -> docker_api::errors::Result<()>
 
     if !(0..num).all(|i| {
         let path: &std::path::Path = path.as_ref();
-        path.join("nodes").join(format!("config_{}.toml", i + 1)).exists()
+        path.join("nodes")
+            .join(format!("config_{}.toml", i + 1))
+            .exists()
     }) {
         error!("Not enough config files to start {num} nodes, see \"axon keygen\" and \"axon config-gen\" to generate config files");
         return Ok(());
     }
 
-    futures::future::join_all((0..num).map(|i| {
+    Ok(futures::future::join_all((0..num).map(|i| {
         docker_api.start_axon(StartAxonArgs {
             name:            format!("axon{}", i + 1),
             config_path:     format!("config_{}.toml", i + 1),
@@ -80,32 +82,32 @@ pub async fn start_nodes(args: StartNodesArgs) -> docker_api::errors::Result<()>
     }))
     .await
     .into_iter()
-    .collect::<docker_api::errors::Result<()>>()
+    .collect::<std::result::Result<(), _>>()?)
 }
 
-pub async fn rm_nodes(args: RmContainerArgs) -> docker_api::errors::Result<()> {
+pub async fn rm_nodes(args: RmContainerArgs) -> Result<()> {
     let RmContainerArgs {
         force,
         docker_args: DockerArgs { docker_uri },
     } = args;
 
-    DockerApi::new(docker_uri)?
+    Ok(DockerApi::new(docker_uri)?
         .remove_containers(["axon_single", "axon1", "axon2", "axon3", "axon4"], force)
-        .await
+        .await?)
 }
 
-pub async fn stop_nodes(args: DockerArgs) -> docker_api::errors::Result<()> {
+pub async fn stop_nodes(args: DockerArgs) -> Result<()> {
     let DockerArgs { docker_uri } = args;
 
-    DockerApi::new(docker_uri)?
+    Ok(DockerApi::new(docker_uri)?
         .stop_containers(["axon_single", "axon1", "axon2", "axon3", "axon4"])
-        .await
+        .await?)
 }
 
-pub async fn ps_nodes(args: DockerArgs) -> docker_api::errors::Result<()> {
+pub async fn ps_nodes(args: DockerArgs) -> Result<()> {
     let DockerArgs { docker_uri } = args;
 
-    DockerApi::new(docker_uri)?
+    Ok(DockerApi::new(docker_uri)?
         .inspect_containers(["axon_single", "axon1", "axon2", "axon3", "axon4"])
-        .await
+        .await?)
 }

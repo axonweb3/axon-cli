@@ -1,5 +1,3 @@
-use std::error::Error as StdErr;
-
 use async_trait::async_trait;
 use clap::{ArgMatches, Args, Command, FromArgMatches, Subcommand};
 
@@ -7,7 +5,7 @@ use crate::{
     constants::{DEFAULT_AXON_NETWORK_NAME, DEFAULT_BENCHMARK_PATH},
     docker::DockerApi,
     sub_command::SubCommand,
-    types::{DockerArgs, RmContainerArgs},
+    types::{DockerArgs, Result, RmContainerArgs},
 };
 
 #[derive(Default)]
@@ -52,7 +50,7 @@ impl SubCommand for Benchmark {
         BenchmarkActions::augment_subcommands(Command::new("benchmark")).about("Manage benchmark")
     }
 
-    async fn exec_command(&self, matches: &ArgMatches) -> Result<(), Box<dyn StdErr>> {
+    async fn exec_command(&self, matches: &ArgMatches) -> Result<()> {
         match BenchmarkActions::from_arg_matches(matches)? {
             BenchmarkActions::Start(args) => {
                 let StartBenchmarkArgs {
@@ -82,30 +80,30 @@ impl SubCommand for Benchmark {
 }
 
 impl Benchmark {
-    async fn rm_benchmark(args: RmContainerArgs) -> docker_api::errors::Result<()> {
+    async fn rm_benchmark(args: RmContainerArgs) -> Result<()> {
         let RmContainerArgs {
             force,
             docker_args: DockerArgs { docker_uri },
         } = args;
 
-        DockerApi::new(docker_uri)?
+        Ok(DockerApi::new(docker_uri)?
             .remove_containers(["benchmark"], force)
-            .await
+            .await?)
     }
 
-    async fn stop_benchmark(args: DockerArgs) -> docker_api::errors::Result<()> {
+    async fn stop_benchmark(args: DockerArgs) -> Result<()> {
         let DockerArgs { docker_uri } = args;
 
-        DockerApi::new(docker_uri)?
+        Ok(DockerApi::new(docker_uri)?
             .stop_containers(["benchmark"])
-            .await
+            .await?)
     }
 
-    async fn ps_benchmark(args: DockerArgs) -> docker_api::errors::Result<()> {
+    async fn ps_benchmark(args: DockerArgs) -> Result<()> {
         let DockerArgs { docker_uri } = args;
 
-        DockerApi::new(docker_uri)?
+        Ok(DockerApi::new(docker_uri)?
             .inspect_containers(["benchmark"])
-            .await
+            .await?)
     }
 }
