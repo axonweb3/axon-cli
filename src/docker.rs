@@ -1,3 +1,4 @@
+use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -7,8 +8,9 @@ use docker_api::{
     docker::Docker,
 };
 use futures::StreamExt;
+use wsl::is_wsl;
 
-const DOCKER_URI: &str = "tcp://127.0.0.1:2375";
+const DEFAULT_DOCKER_URI: &str = "tcp://127.0.0.1:2375";
 const AXON_IMAGE_NAME: &str = "wenyuancas/axon";
 const AXON_IMAGE_TAG: &str = "v1";
 const BM_IMAGE_NAME: &str = "zhengjianhui/axon-benchmark";
@@ -24,7 +26,8 @@ impl DockerApi {
     }
 
     pub fn new_docker() -> Docker {
-        Docker::new(DOCKER_URI).unwrap()
+        let docker_api_url = env::var("DOCKER_API_URL").unwrap_or(String::from(DEFAULT_DOCKER_URI));
+        Docker::new(docker_api_url).unwrap()
     }
 
     pub async fn create_network(network_name: &str) {
@@ -71,8 +74,17 @@ impl DockerApi {
         let cmd = vec!["./axon", file_para, genesis_para];
         println!("cmd: {:?}", cmd);
 
-        let data_mapping = self.path.to_owned() + "/devtools" + ":/app/devtools";
-        let log_mapping = self.path.to_owned() + "/logs/" + name + ":/app/logs";
+        let mut base_path = Path::new(&self.path);
+        let wsl_path: String;
+
+        if is_wsl() {
+            wsl_path = wslpath::wsl_to_windows(&self.path.to_owned()).unwrap().to_owned().replace("/", "\\");
+            base_path = Path::new(&wsl_path);
+        }
+
+        let data_mapping = Path::join(base_path, "devtools").to_str().unwrap().to_owned() + ":/app/devtools";
+        let log_mapping = Path::join(base_path, "logs").to_str().unwrap().to_owned() + ":/app/logs";
+
         let vols = vec![data_mapping, log_mapping];
         println!("mapping: {:?}", vols);
         // prometheus collecting port from 8900-8903
