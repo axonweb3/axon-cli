@@ -15,7 +15,7 @@ use axon_protocol::{
 use clap::Args;
 use ethers_core::abi::{Contract, Token};
 use log::{error, info};
-use ophelia::{PrivateKey, PublicKey, Signature, ToBlsPublicKey, ToPublicKey};
+use ophelia::{PrivateKey, PublicKey, Signature, ToBlsPublicKey};
 use ophelia_blst::BlsPrivateKey;
 use ophelia_secp256k1::Secp256k1RecoverablePrivateKey;
 use rand::rngs::OsRng;
@@ -60,11 +60,6 @@ pub struct ConfigGenArgs {
     /// the p2p address of nodes
     #[clap(short, long, value_delimiter = ',')]
     addresses: Vec<String>,
-
-    /// the private key to send transactions in genesis block, default to the
-    /// first key pair
-    #[clap(short = 'P', long)]
-    private_key: Option<String>,
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -268,7 +263,6 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
         key_pairs_path,
         path: path_str,
         addresses,
-        private_key,
     } = args;
 
     let path: &Path = path_str.as_ref();
@@ -325,22 +319,10 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
     let chain_id = genesis.block.header.chain_id;
     let fee_per_gas = genesis.block.header.base_fee_per_gas;
 
-    let (private_key, address) = match private_key {
-        Some(private_key) => {
-            let private_key =
-                Secp256k1RecoverablePrivateKey::try_from(hex_decode(private_key)?.as_slice())?;
-            let public_key = private_key.pub_key();
-
-            let address = Address::from_pubkey_bytes(public_key.to_bytes())?;
-            (private_key, address.0)
-        }
-        None => (
-            Secp256k1RecoverablePrivateKey::try_from(
-                first_key_pair.bls_private_key.as_bytes().as_ref(),
-            )?,
-            first_key_pair.address,
-        ),
-    };
+    let private_key = Secp256k1RecoverablePrivateKey::try_from(
+        first_key_pair.bls_private_key.as_bytes().as_ref(),
+    )?;
+    let address = first_key_pair.address;
 
     let metadata_address = contract_address(&address, 0);
     let wckb_address = contract_address(&address, 1);
