@@ -6,13 +6,16 @@ use clap::{ArgMatches, Command, FromArgMatches, Subcommand};
 
 use self::{
     config::{generate_configs, generate_key_pairs, log_key_pairs, ConfigGenArgs, KeygenArgs},
-    nodes::{ps_nodes, rm_nodes, start_nodes, stop_nodes, StartNodesArgs},
+    nodes::{
+        ps_nodes, rm_nodes, start_nodes, stop_nodes, OperateNodeContainersArgs,
+        RmNodeContainersArgs, StartNodesArgs,
+    },
 };
 use crate::{
     constants::{DEFAULT_AXON_DATA_VOLUME, DEFAULT_NODE_KEY_PAIRS_PATH},
     docker::DockerApi,
     sub_command::SubCommand,
-    types::{DockerArgs, Result, RmContainerArgs},
+    types::{DockerArgs, Result},
 };
 
 #[derive(Default)]
@@ -24,13 +27,13 @@ enum AxonNodesActions {
     Start(StartNodesArgs),
 
     /// Stop axon nodes
-    Stop(DockerArgs),
+    Stop(OperateNodeContainersArgs),
 
     /// Remove containers of Axon
-    Rm(RmContainerArgs),
+    Rm(RmNodeContainersArgs),
 
     /// Inspect containers of Axon
-    Ps(DockerArgs),
+    Ps(OperateNodeContainersArgs),
 
     /// Clean chain data
     Clean {

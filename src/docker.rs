@@ -165,36 +165,50 @@ impl DockerApi {
         parse_inspect_result(inspect)
     }
 
-    pub async fn remove_one_container(&self, name: impl AsRef<str>, force: bool) -> Result<()> {
+    pub async fn get_container(
+        &self,
+        name: impl AsRef<str>,
+    ) -> Result<Option<ContainerInspect200Response>> {
         let container = self.find_container(name.as_ref()).await?;
 
-        if let Some(container) = container {
-            let id = container.id.unwrap_or_else(|| "".to_string());
-            if !force {
-                if let Some(state) = container.state {
-                    if state.running == Some(true) {
-                        error!(
-                            "Can't remove running container {}, id: {}",
-                            name.as_ref(),
-                            id
-                        );
-                        return Ok(());
-                    }
+        if container.is_none() {
+            error!("Container {} does't exist", name.as_ref());
+        };
+
+        Ok(container)
+    }
+
+    pub async fn remove_one_container(&self, name: impl AsRef<str>, force: bool) -> Result<()> {
+        let container = self.get_container(name.as_ref()).await?;
+
+        let container = match container {
+            None => return Ok(()),
+            Some(val) => val,
+        };
+
+        let id = container.id.unwrap_or_else(|| "".to_string());
+        if !force {
+            if let Some(state) = container.state {
+                if state.running == Some(true) {
+                    error!(
+                        "Can't remove running container {}, id: {}",
+                        name.as_ref(),
+                        id
+                    );
+                    return Ok(());
                 }
             }
-
-            let opts = RmContainerOpts::builder().force(force).build();
-
-            info!("Removing container {}, id: {}...", name.as_ref(), id);
-            self.docker
-                .containers()
-                .get(Id::from(name.as_ref()))
-                .remove(&opts)
-                .await?;
-            info!("Removed container {}, id: {}", name.as_ref(), id);
-        } else {
-            debug!("Couldn't found container {}", name.as_ref());
         }
+
+        let opts = RmContainerOpts::builder().force(force).build();
+
+        info!("Removing container {}, id: {}...", name.as_ref(), id);
+        self.docker
+            .containers()
+            .get(Id::from(name.as_ref()))
+            .remove(&opts)
+            .await?;
+        info!("Removed container {}, id: {}", name.as_ref(), id);
 
         Ok(())
     }
@@ -215,27 +229,28 @@ impl DockerApi {
     }
 
     pub async fn stop_one_container(&self, name: impl AsRef<str>) -> Result<()> {
-        let container = self.find_container(name.as_ref()).await?;
+        let container = self.get_container(name.as_ref()).await?;
 
-        if let Some(container) = container {
-            let id = container.id.unwrap_or_else(|| "".to_string());
-            if let Some(state) = container.state {
-                if state.running == Some(false) {
-                    error!("Can't stop stopped container {}, id: {}", name.as_ref(), id);
-                    return Ok(());
-                }
+        let container = match container {
+            Some(val) => val,
+            None => return Ok(()),
+        };
+
+        let id = container.id.unwrap_or_else(|| "".to_string());
+        if let Some(state) = container.state {
+            if state.running == Some(false) {
+                error!("Can't stop stopped container {}, id: {}", name.as_ref(), id);
+                return Ok(());
             }
-
-            info!("Stopping container {}, id: {}...", name.as_ref(), id);
-            self.docker
-                .containers()
-                .get(name.as_ref())
-                .stop(None)
-                .await?;
-            info!("Stopped container {}, id: {}", name.as_ref(), id);
-        } else {
-            debug!("Couldn't found container {}", name.as_ref());
         }
+
+        info!("Stopping container {}, id: {}...", name.as_ref(), id);
+        self.docker
+            .containers()
+            .get(name.as_ref())
+            .stop(None)
+            .await?;
+        info!("Stopped container {}, id: {}", name.as_ref(), id);
 
         Ok(())
     }
@@ -289,11 +304,11 @@ impl DockerApi {
     }
 
     pub async fn inspect_one_container(&self, name: impl AsRef<str>) -> Result<()> {
-        let container = self.find_container(name.as_ref()).await?;
+        let container = self.get_container(name.as_ref()).await?;
 
         let container = match container {
-            None => return Ok(()),
             Some(val) => val,
+            None => return Ok(()),
         };
 
         info!(

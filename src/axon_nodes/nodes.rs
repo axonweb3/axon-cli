@@ -4,7 +4,7 @@ use log::error;
 use crate::{
     constants::{DEFAULT_AXON_DATA_VOLUME, DEFAULT_AXON_NETWORK_NAME, DEFAULT_AXON_PATH},
     docker::{DockerApi, StartAxonArgs},
-    types::{DockerArgs, Result, RmContainerArgs},
+    types::{DockerArgs, Result},
 };
 
 #[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
@@ -36,6 +36,30 @@ pub struct StartNodesArgs {
     /// the starting of axon nodes' p2p ports
     #[clap(short = '2', long, default_value = "10000")]
     p2p_port: u32,
+
+    #[clap(flatten)]
+    docker_args: DockerArgs,
+}
+
+#[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+pub struct OperateNodeContainersArgs {
+    /// number of axon nodes
+    #[clap(short, long, default_value = "1")]
+    number: u32,
+
+    #[clap(flatten)]
+    docker_args: DockerArgs,
+}
+
+#[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+pub struct RmNodeContainersArgs {
+    /// number of axon nodes
+    #[clap(short, long, default_value = "1")]
+    number: u32,
+
+    /// force the removal of containers
+    #[clap(short, long)]
+    force: bool,
 
     #[clap(flatten)]
     docker_args: DockerArgs,
@@ -85,29 +109,36 @@ pub async fn start_nodes(args: StartNodesArgs) -> Result<()> {
     .collect::<std::result::Result<(), _>>()?)
 }
 
-pub async fn rm_nodes(args: RmContainerArgs) -> Result<()> {
-    let RmContainerArgs {
+pub async fn rm_nodes(args: RmNodeContainersArgs) -> Result<()> {
+    let RmNodeContainersArgs {
+        number,
         force,
         docker_args: DockerArgs { docker_uri },
     } = args;
 
     Ok(DockerApi::new(docker_uri)?
-        .remove_containers(["axon_single", "axon1", "axon2", "axon3", "axon4"], force)
+        .remove_containers((1..number + 1).map(|i| format!("axon{i}")), force)
         .await?)
 }
 
-pub async fn stop_nodes(args: DockerArgs) -> Result<()> {
-    let DockerArgs { docker_uri } = args;
+pub async fn stop_nodes(args: OperateNodeContainersArgs) -> Result<()> {
+    let OperateNodeContainersArgs {
+        number,
+        docker_args: DockerArgs { docker_uri },
+    } = args;
 
     Ok(DockerApi::new(docker_uri)?
-        .stop_containers(["axon_single", "axon1", "axon2", "axon3", "axon4"])
+        .stop_containers((1..number + 1).map(|i| format!("axon{i}")))
         .await?)
 }
 
-pub async fn ps_nodes(args: DockerArgs) -> Result<()> {
-    let DockerArgs { docker_uri } = args;
+pub async fn ps_nodes(args: OperateNodeContainersArgs) -> Result<()> {
+    let OperateNodeContainersArgs {
+        number,
+        docker_args: DockerArgs { docker_uri },
+    } = args;
 
     Ok(DockerApi::new(docker_uri)?
-        .inspect_containers(["axon_single", "axon1", "axon2", "axon3", "axon4"])
+        .inspect_containers((1..number + 1).map(|i| format!("axon{i}")))
         .await?)
 }

@@ -89,7 +89,7 @@ lazy_static! {
         Contract::load(PROXY_CONTRACT.abi.get().as_bytes()).unwrap();
 }
 
-pub const AXON_IMAGE_NAME: &str = "wenyuancas/axon";
-pub const AXON_IMAGE_TAG: &str = "v1";
+pub const AXON_IMAGE_NAME: &str = "hanssen0/axon";
+pub const AXON_IMAGE_TAG: &str = "a53490b";
 pub const BENCHMARK_IMAGE_NAME: &str = "zhengjianhui/axon-benchmark";
 pub const BENCHMARK_IMAGE_TAG: &str = "latest";

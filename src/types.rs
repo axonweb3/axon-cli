@@ -12,7 +12,7 @@ pub struct DockerArgs {
 
 #[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct RmContainerArgs {
-    /// force the removal of containers
+    /// force the removal of container
     #[clap(short, long)]
     pub force: bool,
 
