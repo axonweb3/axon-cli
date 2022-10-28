@@ -2,7 +2,7 @@
 privkey = "{PRIVATE_KEY}"
 
 # db config
-data_path = "./nodes/data"
+data_path = "./nodes/{DATA_PATH}"
 
 epoch_len = 100_000_000
 

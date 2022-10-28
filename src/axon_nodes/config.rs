@@ -464,9 +464,9 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
         let peer_id = &key_pair.peer_id;
 
         if i < addresses.len() {
-            format!("[[network.bootstraps]]\nmulti_address = \"{}/p2p{peer_id}\"", &addresses[i])
+            format!("[[network.bootstraps]]\nmulti_address = \"{}/p2p/{peer_id}\"", &addresses[i])
         } else {
-            format!("[[network.bootstraps]]\nmulti_address = \"/ip4/127.0.0.1/tcp/{}/p2p/{peer_id}\"", 8001 + i)
+            format!("[[network.bootstraps]]\nmulti_address = \"/ip4/172.17.0.1/tcp/{}/p2p/{peer_id}\"", 10000 + i)
         }
     }).reduce(|a, b| format!("{a}\n{b}")).unwrap_or_else(|| "".to_string());
 
@@ -478,6 +478,7 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
             let bls_private_key = &key_pair.bls_private_key;
             let config = config
                 .replace("{PRIVATE_KEY}", &bls_private_key.as_string())
+                .replace("{DATA_PATH}", &format!("data{index}"))
                 .replace(
                     "{METADATA_CONTRACT_ADDRESS}",
                     &format!("0x{metadata_proxy_address:x}"),
