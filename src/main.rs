@@ -8,6 +8,7 @@ mod docker;
 mod interactive;
 mod sub_command;
 mod types;
+mod utils;
 
 use interactive::Interactive;
 use simplelog::{ConfigBuilder, TermLogger, TerminalMode};

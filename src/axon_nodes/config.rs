@@ -1,7 +1,5 @@
 use std::{
-    borrow::Cow,
-    fs::{create_dir_all, read_to_string, write, File},
-    io::BufReader,
+    fs::{create_dir_all, write},
     path::Path,
 };
 
@@ -19,7 +17,7 @@ use ophelia::{PrivateKey, PublicKey, Signature, ToBlsPublicKey};
 use ophelia_blst::BlsPrivateKey;
 use ophelia_secp256k1::Secp256k1RecoverablePrivateKey;
 use rand::rngs::OsRng;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use tentacle_secio::SecioKeyPair;
 
 use crate::{
@@ -30,6 +28,9 @@ use crate::{
         VALIDATOR_TEMPLATE,
     },
     types::Result,
+    utils::{
+        from_json_file, read_or_create_json_template, read_or_create_plain_template, to_json_file,
+    },
 };
 
 #[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
@@ -106,23 +107,6 @@ fn get_key_pair_from_private_key(
     })
 }
 
-fn from_json_file<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T> {
-    let file = File::open(path.as_ref())?;
-    let reader = BufReader::new(file);
-
-    Ok(serde_json::from_reader(reader)?)
-}
-
-fn to_json_file<T: Serialize>(val: &T, path: impl AsRef<Path>) -> Result<()> {
-    let file = File::create(path.as_ref())?;
-
-    serde_json::to_writer_pretty(&file, val)?;
-
-    file.sync_all()?;
-
-    Ok(())
-}
-
 pub fn generate_key_pairs(args: &KeygenArgs) -> Result<()> {
     let KeygenArgs {
         number,
@@ -169,44 +153,6 @@ pub fn log_key_pairs(path: impl AsRef<Path>) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(&key_pairs_list)?);
 
     Ok(())
-}
-
-fn read_or_create_json_template<T: DeserializeOwned + ToOwned<Owned = T> + Serialize + ?Sized>(
-    path_ref: impl AsRef<Path>,
-    val: &T,
-) -> Result<Cow<T>> {
-    let path = path_ref.as_ref();
-
-    let result = if path.exists() {
-        Cow::Owned(from_json_file(&path)?)
-    } else {
-        to_json_file(val, path)?;
-
-        info!("Created template {}", path.to_str().unwrap_or(""));
-
-        Cow::Borrowed(val)
-    };
-
-    Ok(result)
-}
-
-fn read_or_create_plain_template<V: ?Sized + AsRef<str>>(
-    path_ref: impl AsRef<Path>,
-    val: &V,
-) -> Result<Cow<str>> {
-    let path = path_ref.as_ref();
-
-    let result = if path.exists() {
-        Cow::Owned(read_to_string(path)?)
-    } else {
-        write(path, val.as_ref().as_bytes())?;
-
-        info!("Created template {}", path.to_str().unwrap_or(""));
-
-        Cow::Borrowed(val.as_ref())
-    };
-
-    Ok(result)
 }
 
 fn get_tx(

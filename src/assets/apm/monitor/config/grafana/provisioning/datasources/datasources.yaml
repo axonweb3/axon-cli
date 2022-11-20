@@ -1,0 +1,47 @@
+apiVersion: 1
+
+datasources:
+- name: Prometheus
+  type: prometheus
+  access: proxy
+  url: http://prometheus:9090
+  basicAuth: false
+
+  
+- name: Prometheus-loki
+  type: prometheus
+  access: proxy
+  url: http://axon-loki:3100/loki
+  basicAuth: false
+
+- name: jaeger
+  type: jaeger
+  access: proxy
+  url: http://jaeger-query:16686
+  basicAuth: false
+
+- name: "Elasticsearch"
+  access: "proxy"
+  basicAuth: false
+  basicAuthPassword: ""
+  basicAuthUser: ""
+  database: "axon-*"
+  isDefault: false
+  password: ""
+  readOnly: false
+  secureJsonFields: {}
+  type: "elasticsearch"
+  typeLogoUrl: ""
+  uid: "xpsRcf3nz"
+  url: "http://elasticsearch:9200"
+  user: ""
+  version: 2
+  orgId: 1
+  withCredentials: false
+  jsonData:
+    esVersion: "7.0.0"
+    includeFrozen: false
+    logLevelField: ""
+    logMessageField: ""
+    maxConcurrentShardRequests: 5
+    timeField: "@timestamp"

@@ -1,5 +1,6 @@
 use axon_protocol::types::{Block, Metadata, MetadataVersion, RichBlock, ValidatorExtend, U256};
 use ethers_core::abi::Contract;
+use include_dir::{include_dir, Dir};
 use lazy_static::lazy_static;
 
 use crate::types::ContractJson;
@@ -28,6 +29,11 @@ pub const PROXY_CONTRACT_JSON: &str = include_str!("./assets/ERC1967Proxy.json")
 pub const CONFIG_TEMPLATE: &str = include_str!("./assets/config_template.toml");
 pub const DB_OPTION_TEMPLATE: &str = include_str!("./assets/default.db-options");
 
+pub const APM_CONFIGS: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/assets/apm");
+pub const APM_MONITOR_VARS_TEMPLATE: &str = include_str!("./assets/apm_monitor_vars_template.yaml");
+pub const APM_MONITOR_PROMETHEUS_TEMPLATE: &str =
+    include_str!("./assets/apm_monitor_prometheus_template.yaml");
+
 lazy_static! {
     pub static ref HOME_PATH: &'static str = string_to_static_str(std::env::var("HOME").unwrap());
     pub static ref DEFAULT_AXON_PATH: &'static str =
@@ -38,6 +44,12 @@ lazy_static! {
         string_to_static_str(format!("{}/key_pairs.json", *DEFAULT_NODES_PATH));
     pub static ref DEFAULT_BENCHMARK_PATH: &'static str =
         string_to_static_str(format!("{}/benchmark", *DEFAULT_AXON_PATH));
+    pub static ref DEFAULT_APM_PATH: &'static str =
+        string_to_static_str(format!("{}/apm", *DEFAULT_AXON_PATH));
+    pub static ref DEFAULT_APM_MONITOR_PATH: &'static str =
+        string_to_static_str(format!("{}/axon-apm-monitor", *DEFAULT_APM_PATH));
+    pub static ref DEFAULT_APM_AGENT_PATH: &'static str =
+        string_to_static_str(format!("{}/axon-apm-agent", *DEFAULT_APM_PATH));
     pub static ref GENESIS_TEMPLATE: RichBlock = {
         let mut block = Block::default();
         block.header.base_fee_per_gas = U256::from(BASE_FEE_PER_GAS);

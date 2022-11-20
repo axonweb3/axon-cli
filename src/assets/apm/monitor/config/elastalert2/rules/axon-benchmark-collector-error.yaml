@@ -1,0 +1,31 @@
+
+es_host: elasticsearch
+es_port: 9200
+
+
+name: axon-collector-benchmark-error
+
+type: any
+
+# (Required)
+# Index to search, wildcard supported
+index: benchmark-*
+filter:
+- query:
+    query_string:
+            #query: "message : error NOT warn"
+        query: "ERROR AND NOT WARN"
+
+# (Required)
+# The alert is use when a match is found
+# alert:
+# - "telegram"
+alert:
+  - discord
+alert_subject: testnet_benchmark_collector_error
+alert_subject_args: []
+discord_webhook_url: 
+alert_text: "{2}:benchmark error due to {0}"
+alert_text_args: ["message","@timestamp"]
+alert_text_type: alert_text_only
+
