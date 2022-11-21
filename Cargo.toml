@@ -17,6 +17,7 @@ ckb-jsonrpc-types = "=0.104"
 ckb-sdk = "2.2"
 ckb-types = "0.104"
 
+blake2b-rs = "0.2"
 ophelia = "0.3"
 ophelia-blst = "0.3"
 ophelia-secp256k1 = "0.3"

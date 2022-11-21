@@ -6,41 +6,31 @@ use log::error;
 use rustyline::{error::ReadlineError, Editor};
 
 use crate::{
-    apm::Apm, axon_nodes::AxonNodes, benchmark::Benchmark, crosschain_tx::CrossChain,
+    apm::Apm, axon_nodes::AxonNodes, benchmark::Benchmark, crosschain_tx::Ckb,
     sub_command::SubCommand,
 };
 
 const HISTORY_FILE: &str = "history.txt";
-const AXON_CMD: &str = "axon";
-const APM_CMD: &str = "apm";
-const CS_CMD: &str = "cs";
-const BENCHMARK_CMD: &str = "benchmark";
 
 #[derive(Default)]
-pub struct Interactive {
-    sub_cmds: HashMap<String, Box<dyn SubCommand>>,
+pub struct Interactive<'a> {
+    sub_cmds: HashMap<&'a str, Box<dyn SubCommand>>,
 }
 
-impl Interactive {
+impl<'a> Interactive<'a> {
     pub fn new() -> Self {
         let mut sub_cmds = HashMap::default();
         sub_cmds.insert(
-            AXON_CMD.to_string(),
+            "axon",
             Box::new(AxonNodes::default()) as Box<dyn SubCommand>,
         );
 
-        sub_cmds.insert(
-            APM_CMD.to_string(),
-            Box::new(Apm::default()) as Box<dyn SubCommand>,
-        );
+        sub_cmds.insert("apm", Box::new(Apm::default()) as Box<dyn SubCommand>);
+
+        sub_cmds.insert("ckb", Box::new(Ckb::default()) as Box<dyn SubCommand>);
 
         sub_cmds.insert(
-            CS_CMD.to_string(),
-            Box::new(CrossChain::default()) as Box<dyn SubCommand>,
-        );
-
-        sub_cmds.insert(
-            BENCHMARK_CMD.to_string(),
+            "benchmark",
             Box::new(Benchmark::default()) as Box<dyn SubCommand>,
         );
         Interactive { sub_cmds }
@@ -77,7 +67,7 @@ impl Interactive {
                         Ok(matches) => {
                             if let Some((name, matches)) = matches.subcommand() {
                                 // println!("cmd name: {}", name);
-                                let sub_cmd = &self.sub_cmds[&name.to_string()];
+                                let sub_cmd = &self.sub_cmds[name];
                                 if let Err(err) = sub_cmd.exec_command(matches).await {
                                     error!("{}", err);
                                 }
