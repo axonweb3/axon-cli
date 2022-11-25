@@ -1,0 +1,13 @@
+#init_chain_node:allhost
+#node_type:axon_all_node   
+
+
+[axon_node]
+xxx.xxx.xxx.xxx
+
+[prometheus_server]
+xxx.xxx.xxx.xxx
+
+[allhost:children]
+axon_node
+prometheus_server

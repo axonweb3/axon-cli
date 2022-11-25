@@ -1,0 +1,5 @@
+# agent
+monitor_agent_dir: /home/handsome0hell/.config/axon/axon-apm-agent
+log_path: \/home\/handsome0hell\/.config\/axon\/logs
+monitor_address: localhost
+es_address: localhost

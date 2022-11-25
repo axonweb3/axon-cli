@@ -191,3 +191,6 @@ wrap_comments = true
 #     ]);
 # }
 overflow_delimited_expr = true
+imports_granularity = "Crate"
+reorder_imports = true
+group_imports = "StdExternalCrate"
