@@ -33,7 +33,7 @@ use crate::{
     },
 };
 
-#[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Args, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct KeygenArgs {
     /// number of key pairs
     #[clap(short, long, default_value = "1")]
@@ -63,7 +63,7 @@ pub struct ConfigGenArgs {
     addresses: Vec<String>,
 }
 
-#[derive(Default, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone)]
 struct KeyPair {
     bls_private_key: Hex,
 
@@ -76,7 +76,7 @@ struct KeyPair {
     peer_id: String,
 }
 
-#[derive(Default, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone)]
 struct KeyPairsList {
     common_ref: String,
 

@@ -5,6 +5,6 @@ use crate::types::Result;
 
 #[async_trait]
 pub trait SubCommand {
-    fn get_command(&self) -> Command;
-    async fn exec_command(&self, matches: &ArgMatches) -> Result<()>;
+    fn get_command(&self) -> Command<'static>;
+    async fn exec_command(&mut self, matches: &ArgMatches) -> Result<()>;
 }

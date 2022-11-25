@@ -25,6 +25,6 @@ async fn main() {
         simplelog::ColorChoice::Auto,
     )))
     .expect("unable to set logger");
-    let inter = Interactive::new();
+    let mut inter = Interactive::new();
     inter.start().await;
 }

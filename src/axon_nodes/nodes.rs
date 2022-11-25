@@ -7,7 +7,7 @@ use crate::{
     types::{DockerArgs, Result},
 };
 
-#[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Args, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct StartNodesArgs {
     /// number of axon nodes
     #[clap(short, long, default_value = "1")]
@@ -41,7 +41,7 @@ pub struct StartNodesArgs {
     docker_args: DockerArgs,
 }
 
-#[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Args, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct OperateNodeContainersArgs {
     /// number of axon nodes
     #[clap(short, long, default_value = "1")]
@@ -51,7 +51,7 @@ pub struct OperateNodeContainersArgs {
     docker_args: DockerArgs,
 }
 
-#[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Args, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct RmNodeContainersArgs {
     /// number of axon nodes
     #[clap(short, long, default_value = "1")]

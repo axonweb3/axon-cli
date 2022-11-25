@@ -26,7 +26,7 @@ enum BenchmarkActions {
     Ps(DockerArgs),
 }
 
-#[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Args, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 struct StartBenchmarkArgs {
     /// the working path of benchmark
     #[clap(short, long, default_value=*DEFAULT_BENCHMARK_PATH)]
@@ -46,11 +46,11 @@ struct StartBenchmarkArgs {
 
 #[async_trait]
 impl SubCommand for Benchmark {
-    fn get_command(&self) -> Command {
+    fn get_command(&self) -> Command<'static> {
         BenchmarkActions::augment_subcommands(Command::new("benchmark")).about("Manage benchmark")
     }
 
-    async fn exec_command(&self, matches: &ArgMatches) -> Result<()> {
+    async fn exec_command(&mut self, matches: &ArgMatches) -> Result<()> {
         match BenchmarkActions::from_arg_matches(matches)? {
             BenchmarkActions::Start(args) => {
                 let StartBenchmarkArgs {

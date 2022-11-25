@@ -3,7 +3,10 @@ use ethers_core::abi::Contract;
 use include_dir::{include_dir, Dir};
 use lazy_static::lazy_static;
 
-use crate::types::ContractJson;
+use crate::{
+    crosschain_tx::types::{CheckpointConfig, CreateSidechainConfigs, OmniConfig},
+    types::ContractJson,
+};
 
 pub const DEFAULT_AXON_NETWORK_NAME: &str = "axon-net";
 pub const DEFAULT_AXON_DATA_VOLUME: &str = "axon-data";
@@ -50,6 +53,11 @@ lazy_static! {
         string_to_static_str(format!("{}/axon-apm-monitor", *DEFAULT_APM_PATH));
     pub static ref DEFAULT_APM_AGENT_PATH: &'static str =
         string_to_static_str(format!("{}/axon-apm-agent", *DEFAULT_APM_PATH));
+    pub static ref DEFAULT_SIDECHAIN_CONFIG_PATH: &'static str =
+        string_to_static_str(format!("{}/sidechain", *DEFAULT_AXON_PATH));
+    pub static ref DEFAULT_CREAET_SIDECHAIN_CONFIG_PATH: &'static str = string_to_static_str(
+        format!("{}/create-sidechain.json", *DEFAULT_SIDECHAIN_CONFIG_PATH)
+    );
     pub static ref GENESIS_TEMPLATE: RichBlock = {
         let mut block = Block::default();
         block.header.base_fee_per_gas = U256::from(BASE_FEE_PER_GAS);
@@ -83,6 +91,18 @@ lazy_static! {
         verifier_list: vec![VALIDATOR_TEMPLATE.clone()],
         ..Default::default()
     };
+    pub static ref CREATE_SIDECHAIN_CONFIG_TEMPLATE: CreateSidechainConfigs =
+        CreateSidechainConfigs {
+            checkpoint_config: CheckpointConfig {
+                base_reward: "0".to_string(),
+                ..Default::default()
+            },
+            omni_config: OmniConfig {
+                max_supply: "0".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
     pub static ref CROSS_CHAIN_CONTRACT: ContractJson<'static> =
         serde_json::from_str(CROSS_CHAIN_CONTRACT_JSON).unwrap();
     pub static ref CROSS_CHAIN_ABI: Contract =

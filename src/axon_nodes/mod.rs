@@ -61,11 +61,11 @@ enum AxonNodesActions {
 
 #[async_trait]
 impl SubCommand for AxonNodes {
-    fn get_command(&self) -> Command {
+    fn get_command(&self) -> Command<'static> {
         AxonNodesActions::augment_subcommands(Command::new("axon")).about("Manage Axon nodes")
     }
 
-    async fn exec_command(&self, matches: &ArgMatches) -> Result<()> {
+    async fn exec_command(&mut self, matches: &ArgMatches) -> Result<()> {
         match AxonNodesActions::from_arg_matches(matches)? {
             AxonNodesActions::Start(args) => {
                 start_nodes(args).await?;

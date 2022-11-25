@@ -3,14 +3,14 @@ use serde::Deserialize;
 
 use crate::constants::get_default_docker_uri;
 
-#[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Args, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct DockerArgs {
     /// uri of docker service
     #[clap(short, long, default_value=get_default_docker_uri())]
     pub docker_uri: String,
 }
 
-#[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Args, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct RmContainerArgs {
     /// force the removal of container
     #[clap(short, long)]

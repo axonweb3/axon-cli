@@ -18,7 +18,7 @@ use crate::{
     utils::read_or_create_plain_template,
 };
 
-#[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Args, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 struct StartApmMonitorArgs {
     /// the working path of APM
     #[clap(short, long, default_value=*DEFAULT_APM_PATH)]
@@ -29,14 +29,14 @@ struct StartApmMonitorArgs {
     monitor_path: String,
 }
 
-#[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Args, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 struct StopApmMonitorArgs {
     /// the working path of APM
     #[clap(short, long, default_value=*DEFAULT_APM_PATH)]
     path: String,
 }
 
-#[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Args, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 struct StartApmAgentArgs {
     /// the working path of APM
     #[clap(short, long, default_value=*DEFAULT_APM_PATH)]
@@ -47,7 +47,7 @@ struct StartApmAgentArgs {
     inventory: Option<String>,
 }
 
-#[derive(Args, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Args, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 struct StopApmAgentArgs {
     /// the working path of APM
     #[clap(short, long, default_value=*DEFAULT_APM_PATH)]
@@ -92,12 +92,12 @@ pub struct Apm {}
 
 #[async_trait]
 impl SubCommand for Apm {
-    fn get_command(&self) -> Command {
+    fn get_command(&self) -> Command<'static> {
         ApmActions::augment_subcommands(Command::new("apm"))
             .about("Manage APM (Application Performance Management)")
     }
 
-    async fn exec_command(&self, matches: &ArgMatches) -> Result<()> {
+    async fn exec_command(&mut self, matches: &ArgMatches) -> Result<()> {
         match ApmActions::from_arg_matches(matches)? {
             ApmActions::Monitor(ApmMonitorActions::Start(StartApmMonitorArgs { path, .. }))
             | ApmActions::Monitor(ApmMonitorActions::Stop(StopApmMonitorArgs { path, .. }))

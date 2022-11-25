@@ -13,11 +13,11 @@ use crate::{
 const HISTORY_FILE: &str = "history.txt";
 
 #[derive(Default)]
-pub struct Interactive<'a> {
-    sub_cmds: HashMap<&'a str, Box<dyn SubCommand>>,
+pub struct Interactive {
+    sub_cmds: HashMap<&'static str, Box<dyn SubCommand>>,
 }
 
-impl<'a> Interactive<'a> {
+impl Interactive {
     pub fn new() -> Self {
         let mut sub_cmds = HashMap::default();
         sub_cmds.insert(
@@ -36,7 +36,7 @@ impl<'a> Interactive<'a> {
         Interactive { sub_cmds }
     }
 
-    pub fn build_interactive(&self) -> Command {
+    pub fn build_interactive(&self) -> Command<'static> {
         let subcmds: Vec<Command> = self
             .sub_cmds
             .values()
@@ -49,7 +49,7 @@ impl<'a> Interactive<'a> {
             .subcommands(subcmds)
     }
 
-    pub async fn start(&self) {
+    pub async fn start(&mut self) {
         let mut rl = Editor::<()>::new();
         if rl.load_history(HISTORY_FILE).is_err() {
             println!("No previous history.");
@@ -67,7 +67,7 @@ impl<'a> Interactive<'a> {
                         Ok(matches) => {
                             if let Some((name, matches)) = matches.subcommand() {
                                 // println!("cmd name: {}", name);
-                                let sub_cmd = &self.sub_cmds[name];
+                                let sub_cmd = self.sub_cmds.get_mut(name).unwrap();
                                 if let Err(err) = sub_cmd.exec_command(matches).await {
                                     error!("{}", err);
                                 }
