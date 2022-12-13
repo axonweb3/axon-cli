@@ -1,7 +1,7 @@
 use ckb_jsonrpc_types::{Deserialize, Serialize};
 use ckb_types::{
     bytes::Bytes,
-    packed::{self},
+    packed,
     prelude::*,
     H160, H256,
 };
