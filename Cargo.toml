@@ -10,12 +10,12 @@ async-trait = "0.1.57"
 
 axon-protocol = { git = "https://github.com/axonweb3/axon", package = "axon-protocol", tag = "v0.1.0-alpha.1" }
 
-ckb-crypto = { version = "0.105", features = ["secp"] }
-ckb-fixed-hash-core = "0.105"
-ckb-hash = "0.105"
-ckb-jsonrpc-types = "=0.105"
+ckb-crypto = { version = "0.106", features = ["secp"] }
+ckb-fixed-hash-core = "0.106"
+ckb-hash = "0.106"
+ckb-jsonrpc-types = "0.106"
 ckb-sdk = "2.2"
-ckb-types = "0.105"
+ckb-types = "0.106"
 
 blake2b-rs = "0.2"
 ophelia = "0.3"
