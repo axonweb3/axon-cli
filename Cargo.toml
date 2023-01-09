@@ -14,7 +14,7 @@ ckb-crypto = { version = "0.106", features = ["secp"] }
 ckb-fixed-hash-core = "0.106"
 ckb-hash = "0.106"
 ckb-jsonrpc-types = "0.106"
-ckb-sdk = "2.2"
+ckb-sdk = "~2.4"
 ckb-types = "0.106"
 
 blake2b-rs = "0.2"
