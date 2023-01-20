@@ -142,10 +142,11 @@ impl<
             SinceSource::Value(0),
         )];
 
-        let cell_collector = self.cell_collector.clone();
-        let tx_dep_provider = self.tx_dep_provider.clone();
-        let header_dep_resolver = self.header_dep_resolver.clone();
-        let cell_dep_resolver = self.cell_dep_resolver.clone();
+        let cell_collector = Arc::clone(&self.cell_collector);
+        let tx_dep_provider =
+            Arc::clone(&self.tx_dep_provider);
+        let header_dep_resolver = Arc::clone(&self.header_dep_resolver);
+        let cell_dep_resolver = Arc::clone(&self.cell_dep_resolver);
         Ok(
             tokio::task::spawn_blocking(move || -> std::result::Result<TransactionView, String> {
                 balance_tx_capacity(
@@ -175,7 +176,8 @@ impl<
         tx_view: TransactionView,
         private_key: SecretKey,
     ) -> Result<TransactionView> {
-        let tx_dep_provider = self.tx_dep_provider.clone();
+        let tx_dep_provider =
+            Arc::clone(&self.tx_dep_provider);
         let (tx_view, not_unlocked) = tokio::task::spawn_blocking(move || {
             let secp_raw_signer = SecpCkbRawKeySigner::new_with_secret_keys(vec![private_key]);
             let secp_signer = SecpSighashScriptSigner::new(Box::new(secp_raw_signer));
@@ -196,7 +198,7 @@ impl<
     }
 
     async fn send_transaction(&self, tx: Transaction) -> Result<H256> {
-        let ckb_rpc_client = self.ckb_rpc_client.clone();
+        let ckb_rpc_client = Arc::clone(&self.ckb_rpc_client);
         let hash = tokio::task::spawn_blocking(move || -> std::result::Result<H256, String> {
             ckb_rpc_client
                 .lock()
