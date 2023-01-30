@@ -1,10 +1,5 @@
 use ckb_jsonrpc_types::{Deserialize, Serialize};
-use ckb_types::{
-    bytes::Bytes,
-    packed,
-    prelude::*,
-    H160, H256,
-};
+use ckb_types::{bytes::Bytes, packed, prelude::*, H160, H256};
 use molecule::prelude::*;
 
 use super::schema::{self, Byte97, IdentityBuilder, StakeInfoBuilder, StakeInfoVecBuilder};
