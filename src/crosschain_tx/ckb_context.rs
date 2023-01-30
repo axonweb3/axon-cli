@@ -143,8 +143,7 @@ impl<
         )];
 
         let cell_collector = Arc::clone(&self.cell_collector);
-        let tx_dep_provider =
-            Arc::clone(&self.tx_dep_provider);
+        let tx_dep_provider = Arc::clone(&self.tx_dep_provider);
         let header_dep_resolver = Arc::clone(&self.header_dep_resolver);
         let cell_dep_resolver = Arc::clone(&self.cell_dep_resolver);
         Ok(
@@ -176,8 +175,7 @@ impl<
         tx_view: TransactionView,
         private_key: SecretKey,
     ) -> Result<TransactionView> {
-        let tx_dep_provider =
-            Arc::clone(&self.tx_dep_provider);
+        let tx_dep_provider = Arc::clone(&self.tx_dep_provider);
         let (tx_view, not_unlocked) = tokio::task::spawn_blocking(move || {
             let secp_raw_signer = SecpCkbRawKeySigner::new_with_secret_keys(vec![private_key]);
             let secp_signer = SecpSighashScriptSigner::new(Box::new(secp_raw_signer));
