@@ -79,6 +79,7 @@ lazy_static! {
             start: 0,
             end:   99999999,
         },
+        epoch: 0,
         gas_limit: 4294967295000,
         gas_price: 1,
         interval: 3000,

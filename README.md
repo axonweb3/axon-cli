@@ -42,7 +42,7 @@ Please clone repository `https://github.com/axonweb3/axon-devops` beforehand, be
     "token": "Fha8Hn6C31VEu3wL5XejIVGocTXiQbJ6HabAC5sLtHHwvqQ63iXj1FmOkH_FVN4mTZwQ",
     "benchmark_cases": ["./benchmark", "./contract_benchmark"]
 }
-                                               
+
 ```  
 This config is not working now, please wait for update. Error messages like the following will be printted:  
 > BigNumber.toString does not accept any parameters; base-10 is assumed.  

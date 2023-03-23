@@ -7,7 +7,7 @@ use axon_protocol::{
     codec::hex_decode,
     types::{
         Address, Eip1559Transaction, Hasher, Hex, SignedTransaction, TransactionAction,
-        UnsignedTransaction, UnverifiedTransaction, ValidatorExtend, H160, U256,
+        UnsignedTransaction, UnverifiedTransaction, ValidatorExtend, H160, U256, MetadataVersion,
     },
 };
 use clap::Args;
@@ -24,7 +24,7 @@ use crate::{
     constants::{
         CONFIG_TEMPLATE, CROSS_CHAIN_ABI, CROSS_CHAIN_CONTRACT, DB_OPTION_TEMPLATE,
         DEFAULT_NODES_PATH, DEFAULT_NODE_KEY_PAIRS_PATH, GENESIS_TEMPLATE, METADATA_ABI,
-        METADATA_CONTRACT, METADATA_TEMPLATE, PROXY_ABI, PROXY_CONTRACT, TOKEN_ABI, TOKEN_CONTRACT,
+        METADATA_TEMPLATE, PROXY_CONTRACT, TOKEN_ABI, TOKEN_CONTRACT,
         VALIDATOR_TEMPLATE,
     },
     types::Result,
@@ -270,18 +270,10 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
     )?;
     let address = first_key_pair.address;
 
-    let metadata_address = contract_address(&address, 0);
-    let wckb_address = contract_address(&address, 1);
-    let metadata_proxy_address = contract_address(&address, 2);
+    let wckb_address = contract_address(&address, 0);
+    let metadata_address = H160::from_slice("ffffffffffffffffff01".as_bytes());
     let cross_chain_address = contract_address(&address, 3);
-    let cross_chain_proxy_address = contract_address(&address, 5);
-
-    let deploy_metadata = get_tx(
-        fee_per_gas,
-        0,
-        TransactionAction::Create,
-        hex_decode(METADATA_CONTRACT.bytecode)?,
-    );
+    let cross_chain_proxy_address = contract_address(&address, 4);
 
     let deploy_token_data =
         TOKEN_ABI
@@ -292,32 +284,9 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
                 Token::String("wCKB".to_string()),
                 Token::Uint(8.into()),
             ])?;
-    let deploy_token = get_tx(fee_per_gas, 1, TransactionAction::Create, deploy_token_data);
+    let deploy_token = get_tx(fee_per_gas, 0, TransactionAction::Create, deploy_token_data);
 
-    let construct_metadata_data = METADATA_ABI.function("construct")?.encode_input(&[])?;
-    let deploy_metadata_proxy_data =
-        PROXY_ABI
-            .constructor()
-            .unwrap()
-            .encode_input(hex_decode(PROXY_CONTRACT.bytecode)?, &[
-                Token::Address(metadata_address),
-                Token::Bytes(construct_metadata_data),
-            ])?;
-    let deploy_metadata_proxy = get_tx(
-        fee_per_gas,
-        2,
-        TransactionAction::Create,
-        deploy_metadata_proxy_data,
-    );
-
-    let deploy_cross_chain = get_tx(
-        fee_per_gas,
-        3,
-        TransactionAction::Create,
-        hex_decode(CROSS_CHAIN_CONTRACT.bytecode)?,
-    );
-
-    let append_metadata_data =
+    let append_metadata_data_1 =
         METADATA_ABI
             .function("appendMetadata")?
             .encode_input(&[Token::Tuple(vec![
@@ -352,17 +321,76 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
                 Token::Uint(metadata.max_tx_size.into()),
                 Token::FixedBytes(metadata.last_checkpoint_block_hash.as_bytes().to_vec()),
             ])])?;
-    let append_metadata = get_tx(
+
+    let append_metadata_1 = get_tx(
         fee_per_gas,
-        4,
-        TransactionAction::Call(metadata_proxy_address),
-        append_metadata_data,
+        1,
+        TransactionAction::Call(metadata_address),
+        append_metadata_data_1,
+    );
+
+    let interval = metadata.version.end - metadata.version.start;
+    metadata.to_mut().version.start = metadata.version.end + 1;
+    metadata.to_mut().version.end = metadata.version.start + interval;
+    metadata.to_mut().epoch = metadata.epoch + 1;
+
+    println!("metadata {:}", metadata.version.end);
+
+    let append_metadata_data_2 =
+        METADATA_ABI
+            .function("appendMetadata")?
+            .encode_input(&[Token::Tuple(vec![
+                Token::Tuple(vec![
+                    Token::Uint(metadata.version.start.into()),
+                    Token::Uint(metadata.version.end.into()),
+                ]),
+                Token::Uint(metadata.epoch.into()),
+                Token::Uint(metadata.gas_limit.into()),
+                Token::Uint(metadata.gas_price.into()),
+                Token::Uint(metadata.interval.into()),
+                Token::Array(
+                    metadata
+                        .verifier_list
+                        .iter()
+                        .map(|ve| {
+                            Token::Tuple(vec![
+                                Token::Bytes(ve.bls_pub_key.as_bytes().to_vec()),
+                                Token::Bytes(ve.pub_key.as_bytes().to_vec()),
+                                Token::Address(ve.address),
+                                Token::Uint(ve.propose_weight.into()),
+                                Token::Uint(ve.vote_weight.into()),
+                            ])
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+                Token::Uint(metadata.propose_ratio.into()),
+                Token::Uint(metadata.prevote_ratio.into()),
+                Token::Uint(metadata.precommit_ratio.into()),
+                Token::Uint(metadata.brake_ratio.into()),
+                Token::Uint(metadata.tx_num_limit.into()),
+                Token::Uint(metadata.max_tx_size.into()),
+                Token::FixedBytes(metadata.last_checkpoint_block_hash.as_bytes().to_vec()),
+            ])])?;
+
+    let append_metadata_2 = get_tx(
+        fee_per_gas,
+        2,
+        TransactionAction::Call(metadata_address),
+        append_metadata_data_2,
+    );
+
+    let deploy_cross_chain = get_tx(
+        fee_per_gas,
+        3,
+        TransactionAction::Create,
+        hex_decode(CROSS_CHAIN_CONTRACT.bytecode)?,
     );
 
     let construct_cross_chain_data = CROSS_CHAIN_ABI.function("construct")?.encode_input(&[
-        Token::Address(metadata_proxy_address),
+        Token::Address(metadata_address),
         Token::Address(wckb_address),
     ])?;
+
     let deploy_cross_chain_proxy_data = Contract::load(PROXY_CONTRACT.abi.get().as_bytes())?
         .constructor()
         .unwrap()
@@ -370,9 +398,10 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
             Token::Address(cross_chain_address),
             Token::Bytes(construct_cross_chain_data),
         ])?;
+
     let deploy_cross_chain_proxy = get_tx(
         fee_per_gas,
-        5,
+        4,
         TransactionAction::Create,
         deploy_cross_chain_proxy_data,
     );
@@ -383,19 +412,19 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
         )?),
         Token::Address(cross_chain_proxy_address),
     ])?;
+
     let grant_role = get_tx(
         fee_per_gas,
-        6,
+        5,
         TransactionAction::Call(wckb_address),
         grant_role_data,
     );
 
     genesis.to_mut().txs = [
-        deploy_metadata,
         deploy_token,
-        deploy_metadata_proxy,
+        append_metadata_1,
+        append_metadata_2,
         deploy_cross_chain,
-        append_metadata,
         deploy_cross_chain_proxy,
         grant_role,
     ]
@@ -427,7 +456,7 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
                 .replace("{DATA_PATH}", &format!("data{index}"))
                 .replace(
                     "{METADATA_CONTRACT_ADDRESS}",
-                    &format!("0x{metadata_proxy_address:x}"),
+                    &format!("0x{metadata_address:x}"),
                 )
                 .replace(
                     "{CROSS_CHAIN_CONTRACT_ADDRESS}",
