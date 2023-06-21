@@ -12,7 +12,6 @@ use axon_protocol::{
 };
 use clap::Args;
 use ethers_core::abi::{Contract, Token};
-use log::{error, info};
 use ophelia::{PrivateKey, PublicKey, Signature, ToBlsPublicKey};
 use ophelia_blst::BlsPrivateKey;
 use ophelia_secp256k1::Secp256k1RecoverablePrivateKey;
@@ -37,12 +36,10 @@ use crate::{
 pub struct KeygenArgs {
     /// number of key pairs
     #[clap(short, long, default_value = "1")]
-    number: u32,
-
+    number:       u32,
     /// the output path for key pairs file
     #[clap(short, long, default_value=*DEFAULT_NODE_KEY_PAIRS_PATH)]
-    path: String,
-
+    path:         String,
     /// private keys are seperated by ',', extra keys will be randomly generated
     #[clap(short = 'P', long, value_delimiter = ',')]
     private_keys: Vec<String>,
@@ -52,35 +49,28 @@ pub struct KeygenArgs {
 pub struct ConfigGenArgs {
     /// the output path of config files
     #[clap(short, long, default_value=*DEFAULT_NODES_PATH)]
-    path: String,
-
+    path:           String,
     /// the path of key pairs file
     #[clap(short, long, default_value=*DEFAULT_NODE_KEY_PAIRS_PATH)]
     key_pairs_path: String,
-
     /// the p2p address of nodes
     #[clap(short, long, value_delimiter = ',')]
-    addresses: Vec<String>,
+    addresses:      Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct KeyPair {
-    bls_private_key: Hex,
-
-    bls_public_key: Hex,
-
+    bls_private_key:      Hex,
+    bls_public_key:       Hex,
     secp256k1_public_key: Hex,
-
-    address: H160,
-
-    peer_id: String,
+    address:              H160,
+    peer_id:              String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct KeyPairsList {
     common_ref: String,
-
-    key_pairs: Vec<KeyPair>,
+    key_pairs:  Vec<KeyPair>,
 }
 
 fn get_key_pair_from_private_key(
@@ -141,7 +131,7 @@ pub fn generate_key_pairs(args: &KeygenArgs) -> Result<()> {
         path,
     )?;
 
-    info!("Key pairs generated");
+    log::info!("Key pairs generated");
 
     Ok(())
 }
@@ -149,7 +139,7 @@ pub fn generate_key_pairs(args: &KeygenArgs) -> Result<()> {
 pub fn log_key_pairs(path: impl AsRef<Path>) -> Result<()> {
     let key_pairs_list: KeyPairsList = from_json_file(path)?;
 
-    info!("Key pairs logged to stdout (to avoid being recorded)");
+    log::info!("Key pairs logged to stdout (to avoid being recorded)");
     println!("{}", serde_json::to_string_pretty(&key_pairs_list)?);
 
     Ok(())
@@ -179,20 +169,20 @@ fn sign_tx(
     chain_id: u64,
 ) -> SignedTransaction {
     let signature = private_key.sign_message(
-        &Hasher::digest(tx.encode(chain_id, None))
+        &Hasher::digest(tx.encode(Some(chain_id), None))
             .as_bytes()
             .try_into()
             .unwrap(),
     );
     let utx = UnverifiedTransaction {
-        unsigned: tx,
+        unsigned:  tx,
         signature: Some(signature.to_bytes().into()),
-        chain_id,
-        hash: Default::default(),
+        chain_id:  Some(chain_id),
+        hash:      Default::default(),
     }
     .calc_hash();
 
-    utx.try_into().unwrap()
+    SignedTransaction::from_unverified(utx, None).unwrap()
 }
 
 fn contract_address(address: &H160, nonce: u32) -> H160 {
@@ -238,7 +228,7 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
     let first_key_pair = if let Some(key_pair) = key_pairs.first() {
         key_pair
     } else {
-        error!("No key pair provided, see \"axon keygen\" to generate key pairs");
+        log::error!("No key pair provided, see \"axon keygen\" to generate key pairs");
         return Ok(());
     };
 
@@ -350,7 +340,6 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
                 Token::Uint(metadata.brake_ratio.into()),
                 Token::Uint(metadata.tx_num_limit.into()),
                 Token::Uint(metadata.max_tx_size.into()),
-                Token::FixedBytes(metadata.last_checkpoint_block_hash.as_bytes().to_vec()),
             ])])?;
     let append_metadata = get_tx(
         fee_per_gas,
@@ -404,7 +393,7 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
     .collect::<Vec<_>>();
 
     to_json_file(&genesis, path.join("genesis.json"))?;
-    info!("Genesis file generated");
+    log::info!("Genesis file generated");
 
     let bootstraps = key_pairs.iter().enumerate().map(|(i, key_pair)| {
         let peer_id = &key_pair.peer_id;
@@ -414,7 +403,7 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
         } else {
             format!("[[network.bootstraps]]\nmulti_address = \"/ip4/172.17.0.1/tcp/{}/p2p/{peer_id}\"", 10000 + i)
         }
-    }).reduce(|a, b| format!("{a}\n{b}")).unwrap_or_else(|| "".to_string());
+    }).reduce(|a, b| format!("{a}\n{b}")).unwrap_or_default();
 
     key_pairs
         .iter()
@@ -438,7 +427,7 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
 
             write(path.join(format!("config_{index}.toml")), config.as_bytes())?;
 
-            info!("Config file {index} generated");
+            log::info!("Config file {index} generated");
 
             Result::Ok(())
         })?;

@@ -73,7 +73,7 @@ impl DockerApi {
             debug!(
                 "Network {} is existed, id: {}",
                 name.as_ref(),
-                network.id.unwrap_or_else(|| "".to_string()),
+                network.id.unwrap_or_default(),
             );
             return Ok(());
         }
@@ -110,7 +110,7 @@ impl DockerApi {
             debug!(
                 "Image {} is existed, id: {}",
                 image_name,
-                image.id.unwrap_or_else(|| "".to_string()),
+                image.id.unwrap_or_default(),
             );
             return Ok(());
         }
@@ -129,7 +129,7 @@ impl DockerApi {
                     ..
                 } => {
                     if progress.is_none() {
-                        info!("{} {}", id.unwrap_or_else(|| "".to_string()), status);
+                        info!("{} {}", id.unwrap_or_default(), status);
                     }
                 }
                 ImageBuildChunk::Update { stream } => {
@@ -177,7 +177,7 @@ impl DockerApi {
             Some(val) => val,
         };
 
-        let id = container.id.unwrap_or_else(|| "".to_string());
+        let id = container.id.unwrap_or_default();
         if !force {
             if let Some(state) = container.state {
                 if state.running == Some(true) {
@@ -227,7 +227,7 @@ impl DockerApi {
             None => return Ok(()),
         };
 
-        let id = container.id.unwrap_or_else(|| "".to_string());
+        let id = container.id.unwrap_or_default();
         if let Some(state) = container.state {
             if state.running == Some(false) {
                 error!("Can't stop stopped container {}, id: {}", name.as_ref(), id);
@@ -268,7 +268,7 @@ impl DockerApi {
         let container = self.find_container(name.as_ref()).await?;
 
         let id = if let Some(container) = container {
-            let id = container.id.unwrap_or_else(|| "".to_string());
+            let id = container.id.unwrap_or_default();
             debug!("Container {} is existed, id: {}", name.as_ref(), id);
 
             if let Some(state) = container.state {
@@ -307,9 +307,9 @@ impl DockerApi {
             name.as_ref(),
             container
                 .state
-                .map(|s| s.status.unwrap_or_else(|| "".to_string()))
-                .unwrap_or_else(|| "".to_string()),
-            container.id.unwrap_or_else(|| "".to_string()),
+                .map(|s| s.status.unwrap_or_default())
+                .unwrap_or_default(),
+            container.id.unwrap_or_default(),
         );
 
         Ok(())

@@ -1,7 +1,6 @@
 mod apm;
 mod axon_nodes;
 mod benchmark;
-mod crosschain_tx;
 
 mod constants;
 mod docker;
@@ -25,6 +24,7 @@ async fn main() {
         simplelog::ColorChoice::Auto,
     )))
     .expect("unable to set logger");
+
     let mut inter = Interactive::new();
     inter.start().await;
 }

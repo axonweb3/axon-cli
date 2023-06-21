@@ -46,7 +46,7 @@ struct StartBenchmarkArgs {
 
 #[async_trait]
 impl SubCommand for Benchmark {
-    fn get_command(&self) -> Command<'static> {
+    fn get_command(&self) -> Command {
         BenchmarkActions::augment_subcommands(Command::new("benchmark")).about("Manage benchmark")
     }
 

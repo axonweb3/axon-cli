@@ -92,7 +92,7 @@ pub struct Apm {}
 
 #[async_trait]
 impl SubCommand for Apm {
-    fn get_command(&self) -> Command<'static> {
+    fn get_command(&self) -> Command {
         ApmActions::augment_subcommands(Command::new("apm"))
             .about("Manage APM (Application Performance Management)")
     }
