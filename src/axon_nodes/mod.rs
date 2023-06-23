@@ -61,7 +61,7 @@ enum AxonNodesActions {
 
 #[async_trait]
 impl SubCommand for AxonNodes {
-    fn get_command(&self) -> Command<'static> {
+    fn get_command(&self) -> Command {
         AxonNodesActions::augment_subcommands(Command::new("axon")).about("Manage Axon nodes")
     }
 

@@ -5,10 +5,7 @@ use colored::*;
 use log::error;
 use rustyline::{error::ReadlineError, Editor};
 
-use crate::{
-    apm::Apm, axon_nodes::AxonNodes, benchmark::Benchmark, crosschain_tx::Ckb,
-    sub_command::SubCommand,
-};
+use crate::{apm::Apm, axon_nodes::AxonNodes, benchmark::Benchmark, sub_command::SubCommand};
 
 const HISTORY_FILE: &str = "history.txt";
 
@@ -20,27 +17,21 @@ pub struct Interactive {
 impl Interactive {
     pub fn new() -> Self {
         let mut sub_cmds = HashMap::default();
-        sub_cmds.insert(
-            "axon",
-            Box::new(AxonNodes::default()) as Box<dyn SubCommand>,
-        );
+        sub_cmds.insert("axon", Box::<AxonNodes>::default() as Box<dyn SubCommand>);
 
-        sub_cmds.insert("apm", Box::new(Apm::default()) as Box<dyn SubCommand>);
-
-        sub_cmds.insert("ckb", Box::new(Ckb::default()) as Box<dyn SubCommand>);
+        sub_cmds.insert("apm", Box::<Apm>::default() as Box<dyn SubCommand>);
 
         sub_cmds.insert(
             "benchmark",
-            Box::new(Benchmark::default()) as Box<dyn SubCommand>,
+            Box::<Benchmark>::default() as Box<dyn SubCommand>,
         );
         Interactive { sub_cmds }
     }
 
-    pub fn build_interactive(&self) -> Command<'static> {
+    pub fn build_interactive(&self) -> Command {
         let subcmds: Vec<Command> = self
             .sub_cmds
             .values()
-            .into_iter()
             .map(|cmd| cmd.get_command())
             .collect();
 

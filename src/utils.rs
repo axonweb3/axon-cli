@@ -36,7 +36,7 @@ pub fn read_or_create_json_template<
     let path = path_ref.as_ref();
 
     let result = if path.exists() {
-        Cow::Owned(from_json_file(&path)?)
+        Cow::Owned(from_json_file(path)?)
     } else {
         to_json_file(val, path)?;
 

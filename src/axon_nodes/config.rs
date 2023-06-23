@@ -6,13 +6,13 @@ use std::{
 use axon_protocol::{
     codec::hex_decode,
     types::{
-        Address, Eip1559Transaction, Hasher, Hex, SignedTransaction, TransactionAction,
+        Address, Eip1559Transaction, Hasher, Hex, Metadata, SignedTransaction, TransactionAction,
         UnsignedTransaction, UnverifiedTransaction, ValidatorExtend, H160, U256,
     },
 };
+use axon_tools::consts::METADATA_CONTRACT_ADDRESS;
 use clap::Args;
-use ethers_core::abi::{Contract, Token};
-use log::{error, info};
+use ethers_core::abi::Token;
 use ophelia::{PrivateKey, PublicKey, Signature, ToBlsPublicKey};
 use ophelia_blst::BlsPrivateKey;
 use ophelia_secp256k1::Secp256k1RecoverablePrivateKey;
@@ -22,10 +22,8 @@ use tentacle_secio::SecioKeyPair;
 
 use crate::{
     constants::{
-        CONFIG_TEMPLATE, CROSS_CHAIN_ABI, CROSS_CHAIN_CONTRACT, DB_OPTION_TEMPLATE,
-        DEFAULT_NODES_PATH, DEFAULT_NODE_KEY_PAIRS_PATH, GENESIS_TEMPLATE, METADATA_ABI,
-        METADATA_CONTRACT, METADATA_TEMPLATE, PROXY_ABI, PROXY_CONTRACT, TOKEN_ABI, TOKEN_CONTRACT,
-        VALIDATOR_TEMPLATE,
+        CONFIG_TEMPLATE, DB_OPTION_TEMPLATE, DEFAULT_NODES_PATH, DEFAULT_NODE_KEY_PAIRS_PATH,
+        GENESIS_TEMPLATE, METADATA_ABI, METADATA_TEMPLATE, VALIDATOR_TEMPLATE,
     },
     types::Result,
     utils::{
@@ -37,12 +35,10 @@ use crate::{
 pub struct KeygenArgs {
     /// number of key pairs
     #[clap(short, long, default_value = "1")]
-    number: u32,
-
+    number:       u32,
     /// the output path for key pairs file
     #[clap(short, long, default_value=*DEFAULT_NODE_KEY_PAIRS_PATH)]
-    path: String,
-
+    path:         String,
     /// private keys are seperated by ',', extra keys will be randomly generated
     #[clap(short = 'P', long, value_delimiter = ',')]
     private_keys: Vec<String>,
@@ -52,35 +48,31 @@ pub struct KeygenArgs {
 pub struct ConfigGenArgs {
     /// the output path of config files
     #[clap(short, long, default_value=*DEFAULT_NODES_PATH)]
-    path: String,
-
+    path:           String,
     /// the path of key pairs file
     #[clap(short, long, default_value=*DEFAULT_NODE_KEY_PAIRS_PATH)]
     key_pairs_path: String,
-
     /// the p2p address of nodes
     #[clap(short, long, value_delimiter = ',')]
-    addresses: Vec<String>,
+    addresses:      Vec<String>,
+    /// the epoch length
+    #[clap(short, long, default_value = "1000000")]
+    epoch_len:      u64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct KeyPair {
-    bls_private_key: Hex,
-
-    bls_public_key: Hex,
-
+    bls_private_key:      Hex,
+    bls_public_key:       Hex,
     secp256k1_public_key: Hex,
-
-    address: H160,
-
-    peer_id: String,
+    address:              H160,
+    peer_id:              String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct KeyPairsList {
     common_ref: String,
-
-    key_pairs: Vec<KeyPair>,
+    key_pairs:  Vec<KeyPair>,
 }
 
 fn get_key_pair_from_private_key(
@@ -141,7 +133,7 @@ pub fn generate_key_pairs(args: &KeygenArgs) -> Result<()> {
         path,
     )?;
 
-    info!("Key pairs generated");
+    log::info!("Key pairs generated");
 
     Ok(())
 }
@@ -149,7 +141,7 @@ pub fn generate_key_pairs(args: &KeygenArgs) -> Result<()> {
 pub fn log_key_pairs(path: impl AsRef<Path>) -> Result<()> {
     let key_pairs_list: KeyPairsList = from_json_file(path)?;
 
-    info!("Key pairs logged to stdout (to avoid being recorded)");
+    log::info!("Key pairs logged to stdout (to avoid being recorded)");
     println!("{}", serde_json::to_string_pretty(&key_pairs_list)?);
 
     Ok(())
@@ -179,29 +171,20 @@ fn sign_tx(
     chain_id: u64,
 ) -> SignedTransaction {
     let signature = private_key.sign_message(
-        &Hasher::digest(tx.encode(chain_id, None))
+        &Hasher::digest(tx.encode(Some(chain_id), None))
             .as_bytes()
             .try_into()
             .unwrap(),
     );
     let utx = UnverifiedTransaction {
-        unsigned: tx,
+        unsigned:  tx,
         signature: Some(signature.to_bytes().into()),
-        chain_id,
-        hash: Default::default(),
+        chain_id:  Some(chain_id),
+        hash:      Default::default(),
     }
     .calc_hash();
 
-    utx.try_into().unwrap()
-}
-
-fn contract_address(address: &H160, nonce: u32) -> H160 {
-    contract_address::ContractAddress::from_sender_and_nonce(
-        &address.as_fixed_bytes().into(),
-        &nonce.into(),
-    )
-    .as_fixed_bytes()
-    .into()
+    SignedTransaction::from_unverified(utx, None).unwrap()
 }
 
 pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
@@ -209,6 +192,7 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
         key_pairs_path,
         path: path_str,
         addresses,
+        epoch_len,
     } = args;
 
     let path: &Path = path_str.as_ref();
@@ -238,7 +222,7 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
     let first_key_pair = if let Some(key_pair) = key_pairs.first() {
         key_pair
     } else {
-        error!("No key pair provided, see \"axon keygen\" to generate key pairs");
+        log::error!("No key pair provided, see \"axon keygen\" to generate key pairs");
         return Ok(());
     };
 
@@ -270,141 +254,26 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
     )?;
     let address = first_key_pair.address;
 
-    let metadata_address = contract_address(&address, 0);
-    let wckb_address = contract_address(&address, 1);
-    let metadata_proxy_address = contract_address(&address, 2);
-    let cross_chain_address = contract_address(&address, 3);
-    let cross_chain_proxy_address = contract_address(&address, 5);
-
-    let deploy_metadata = get_tx(
+    let append_metadata_1 = get_tx(
         fee_per_gas,
         0,
-        TransactionAction::Create,
-        hex_decode(METADATA_CONTRACT.bytecode)?,
+        TransactionAction::Call(METADATA_CONTRACT_ADDRESS),
+        build_append_metadata_call(&metadata, 0, epoch_len - 1, 0)?,
     );
-
-    let deploy_token_data =
-        TOKEN_ABI
-            .constructor()
-            .unwrap()
-            .encode_input(hex_decode(TOKEN_CONTRACT.bytecode)?, &[
-                Token::String("wCKB".to_string()),
-                Token::String("wCKB".to_string()),
-                Token::Uint(8.into()),
-            ])?;
-    let deploy_token = get_tx(fee_per_gas, 1, TransactionAction::Create, deploy_token_data);
-
-    let construct_metadata_data = METADATA_ABI.function("construct")?.encode_input(&[])?;
-    let deploy_metadata_proxy_data =
-        PROXY_ABI
-            .constructor()
-            .unwrap()
-            .encode_input(hex_decode(PROXY_CONTRACT.bytecode)?, &[
-                Token::Address(metadata_address),
-                Token::Bytes(construct_metadata_data),
-            ])?;
-    let deploy_metadata_proxy = get_tx(
+    let append_metadata_2 = get_tx(
         fee_per_gas,
-        2,
-        TransactionAction::Create,
-        deploy_metadata_proxy_data,
+        1,
+        TransactionAction::Call(METADATA_CONTRACT_ADDRESS),
+        build_append_metadata_call(&metadata, *epoch_len, epoch_len * 2 - 1, 1)?,
     );
 
-    let deploy_cross_chain = get_tx(
-        fee_per_gas,
-        3,
-        TransactionAction::Create,
-        hex_decode(CROSS_CHAIN_CONTRACT.bytecode)?,
-    );
-
-    let append_metadata_data =
-        METADATA_ABI
-            .function("appendMetadata")?
-            .encode_input(&[Token::Tuple(vec![
-                Token::Tuple(vec![
-                    Token::Uint(metadata.version.start.into()),
-                    Token::Uint(metadata.version.end.into()),
-                ]),
-                Token::Uint(metadata.epoch.into()),
-                Token::Uint(metadata.gas_limit.into()),
-                Token::Uint(metadata.gas_price.into()),
-                Token::Uint(metadata.interval.into()),
-                Token::Array(
-                    metadata
-                        .verifier_list
-                        .iter()
-                        .map(|ve| {
-                            Token::Tuple(vec![
-                                Token::Bytes(ve.bls_pub_key.as_bytes().to_vec()),
-                                Token::Bytes(ve.pub_key.as_bytes().to_vec()),
-                                Token::Address(ve.address),
-                                Token::Uint(ve.propose_weight.into()),
-                                Token::Uint(ve.vote_weight.into()),
-                            ])
-                        })
-                        .collect::<Vec<_>>(),
-                ),
-                Token::Uint(metadata.propose_ratio.into()),
-                Token::Uint(metadata.prevote_ratio.into()),
-                Token::Uint(metadata.precommit_ratio.into()),
-                Token::Uint(metadata.brake_ratio.into()),
-                Token::Uint(metadata.tx_num_limit.into()),
-                Token::Uint(metadata.max_tx_size.into()),
-                Token::FixedBytes(metadata.last_checkpoint_block_hash.as_bytes().to_vec()),
-            ])])?;
-    let append_metadata = get_tx(
-        fee_per_gas,
-        4,
-        TransactionAction::Call(metadata_proxy_address),
-        append_metadata_data,
-    );
-
-    let construct_cross_chain_data = CROSS_CHAIN_ABI.function("construct")?.encode_input(&[
-        Token::Address(metadata_proxy_address),
-        Token::Address(wckb_address),
-    ])?;
-    let deploy_cross_chain_proxy_data = Contract::load(PROXY_CONTRACT.abi.get().as_bytes())?
-        .constructor()
-        .unwrap()
-        .encode_input(hex_decode(PROXY_CONTRACT.bytecode)?, &[
-            Token::Address(cross_chain_address),
-            Token::Bytes(construct_cross_chain_data),
-        ])?;
-    let deploy_cross_chain_proxy = get_tx(
-        fee_per_gas,
-        5,
-        TransactionAction::Create,
-        deploy_cross_chain_proxy_data,
-    );
-
-    let grant_role_data = TOKEN_ABI.function("grantRole")?.encode_input(&[
-        Token::FixedBytes(hex_decode(
-            "241ecf16d79d0f8dbfb92cbc07fe17840425976cf0667f022fe9877caa831b08",
-        )?),
-        Token::Address(cross_chain_proxy_address),
-    ])?;
-    let grant_role = get_tx(
-        fee_per_gas,
-        6,
-        TransactionAction::Call(wckb_address),
-        grant_role_data,
-    );
-
-    genesis.to_mut().txs = [
-        deploy_metadata,
-        deploy_token,
-        deploy_metadata_proxy,
-        deploy_cross_chain,
-        append_metadata,
-        deploy_cross_chain_proxy,
-        grant_role,
-    ]
-    .into_iter()
-    .map(|tx| sign_tx(&private_key, tx, chain_id))
-    .collect::<Vec<_>>();
+    genesis.to_mut().txs = [append_metadata_1, append_metadata_2]
+        .into_iter()
+        .map(|tx| sign_tx(&private_key, tx, chain_id))
+        .collect::<Vec<_>>();
 
     to_json_file(&genesis, path.join("genesis.json"))?;
-    info!("Genesis file generated");
+    log::info!("Genesis file generated");
 
     let bootstraps = key_pairs.iter().enumerate().map(|(i, key_pair)| {
         let peer_id = &key_pair.peer_id;
@@ -414,7 +283,7 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
         } else {
             format!("[[network.bootstraps]]\nmulti_address = \"/ip4/172.17.0.1/tcp/{}/p2p/{peer_id}\"", 10000 + i)
         }
-    }).reduce(|a, b| format!("{a}\n{b}")).unwrap_or_else(|| "".to_string());
+    }).reduce(|a, b| format!("{a}\n{b}")).unwrap_or_default();
 
     key_pairs
         .iter()
@@ -425,23 +294,54 @@ pub fn generate_configs(args: &ConfigGenArgs) -> Result<()> {
             let config = config
                 .replace("{PRIVATE_KEY}", &bls_private_key.as_string())
                 .replace("{DATA_PATH}", &format!("data{index}"))
-                .replace(
-                    "{METADATA_CONTRACT_ADDRESS}",
-                    &format!("0x{metadata_proxy_address:x}"),
-                )
-                .replace(
-                    "{CROSS_CHAIN_CONTRACT_ADDRESS}",
-                    &format!("0x{cross_chain_proxy_address:x}"),
-                )
-                .replace("{WCKB_CONTRACT_ADDRESS}", &format!("0x{wckb_address:x}"))
+                .replace("{INIT_DISTRIBUTE_ADDRESS}", &format!("0x{address:x}"))
                 .replace("{NETWORK_BOOTSTRAPS}", &bootstraps);
 
             write(path.join(format!("config_{index}.toml")), config.as_bytes())?;
 
-            info!("Config file {index} generated");
+            log::info!("Config file {index} generated");
 
             Result::Ok(())
         })?;
 
     Ok(())
+}
+
+fn build_append_metadata_call(
+    metadata: &Metadata,
+    start: u64,
+    end: u64,
+    epoch: u64,
+) -> Result<Vec<u8>> {
+    Ok(METADATA_ABI
+        .function("appendMetadata")?
+        .encode_input(&[Token::Tuple(vec![
+            Token::Tuple(vec![Token::Uint(start.into()), Token::Uint(end.into())]),
+            Token::Uint(epoch.into()),
+            Token::Uint(metadata.gas_limit.into()),
+            Token::Uint(metadata.gas_price.into()),
+            Token::Uint(metadata.interval.into()),
+            Token::Array(
+                metadata
+                    .verifier_list
+                    .iter()
+                    .map(|ve| {
+                        Token::Tuple(vec![
+                            Token::Bytes(ve.bls_pub_key.as_bytes().to_vec()),
+                            Token::Bytes(ve.pub_key.as_bytes().to_vec()),
+                            Token::Address(ve.address),
+                            Token::Uint(ve.propose_weight.into()),
+                            Token::Uint(ve.vote_weight.into()),
+                        ])
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            Token::Uint(metadata.propose_ratio.into()),
+            Token::Uint(metadata.prevote_ratio.into()),
+            Token::Uint(metadata.precommit_ratio.into()),
+            Token::Uint(metadata.brake_ratio.into()),
+            Token::Uint(metadata.tx_num_limit.into()),
+            Token::Uint(metadata.max_tx_size.into()),
+            Token::Array(vec![]),
+        ])])?)
 }
