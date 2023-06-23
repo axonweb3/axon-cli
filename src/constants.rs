@@ -21,10 +21,7 @@ pub fn string_to_static_str(s: String) -> &'static str {
 
 pub const BASE_FEE_PER_GAS: u64 = 0x539;
 
-pub const CROSS_CHAIN_CONTRACT_JSON: &str = include_str!("./assets/CrossChain.json");
 pub const METADATA_CONTRACT_JSON: &str = include_str!("./assets/MetadataManager.json");
-pub const TOKEN_CONTRACT_JSON: &str = include_str!("./assets/MirrorToken.json");
-pub const PROXY_CONTRACT_JSON: &str = include_str!("./assets/ERC1967Proxy.json");
 
 pub const CONFIG_TEMPLATE: &str = include_str!("./assets/config_template.toml");
 pub const DB_OPTION_TEMPLATE: &str = include_str!("./assets/default.db-options");
@@ -88,22 +85,10 @@ lazy_static! {
         verifier_list: vec![VALIDATOR_TEMPLATE.clone()],
         ..Default::default()
     };
-    pub static ref CROSS_CHAIN_CONTRACT: ContractJson<'static> =
-        serde_json::from_str(CROSS_CHAIN_CONTRACT_JSON).unwrap();
-    pub static ref CROSS_CHAIN_ABI: Contract =
-        Contract::load(CROSS_CHAIN_CONTRACT.abi.get().as_bytes()).unwrap();
     pub static ref METADATA_CONTRACT: ContractJson<'static> =
         serde_json::from_str(METADATA_CONTRACT_JSON).unwrap();
     pub static ref METADATA_ABI: Contract =
         Contract::load(METADATA_CONTRACT.abi.get().as_bytes()).unwrap();
-    pub static ref TOKEN_CONTRACT: ContractJson<'static> =
-        serde_json::from_str(TOKEN_CONTRACT_JSON).unwrap();
-    pub static ref TOKEN_ABI: Contract =
-        Contract::load(TOKEN_CONTRACT.abi.get().as_bytes()).unwrap();
-    pub static ref PROXY_CONTRACT: ContractJson<'static> =
-        serde_json::from_str(PROXY_CONTRACT_JSON).unwrap();
-    pub static ref PROXY_ABI: Contract =
-        Contract::load(PROXY_CONTRACT.abi.get().as_bytes()).unwrap();
 }
 
 pub const AXON_IMAGE_NAME: &str = "hanssen0/axon";

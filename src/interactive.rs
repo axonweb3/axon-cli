@@ -17,10 +17,7 @@ pub struct Interactive {
 impl Interactive {
     pub fn new() -> Self {
         let mut sub_cmds = HashMap::default();
-        sub_cmds.insert(
-            "axon",
-            Box::<AxonNodes>::default() as Box<dyn SubCommand>,
-        );
+        sub_cmds.insert("axon", Box::<AxonNodes>::default() as Box<dyn SubCommand>);
 
         sub_cmds.insert("apm", Box::<Apm>::default() as Box<dyn SubCommand>);
 
